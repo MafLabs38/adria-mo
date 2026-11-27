@@ -313,10 +313,12 @@ proposer des PR. On le traite comme un vrai projet, au niveau de Portarr.
   - **le dépôt ne contient que le code et la structure** : aucune donnée, aucun secret, aucune
     adresse email, aucune vraie photo, aucun rapport. Tout cela vit dans la base et le volume. Les
     données de test sont fictives ;
-  - les PR venant d'un **fork** ne reçoivent pas les secrets : les agents de revue (qui utilisent ton
-    jeton Claude) n'y tournent pas, et ne doivent jamais exécuter le code d'un fork avec ces secrets.
-    Le plus simple : **ajouter le contributeur comme collaborateur** (branches dans le dépôt, sans droit de
-    fusion sur `main`/`develop`) ;
+  - **un contributeur extérieur passe par un fork**. Une branche de ce dépôt exécute ses propres
+    workflows avec les secrets (jeton Claude, jeton SonarQube) : un collaborateur pourrait modifier un
+    workflow sur sa branche et les lire avant toute relecture. Les PR d'un fork ne reçoivent aucun
+    secret : la CI y tourne sans SonarQube ni agents de revue. Pour les lancer, le mainteneur relit
+    les workflows de la PR, puis pousse la branche dans le dépôt. Le droit de collaborateur est réservé à
+    quelqu'un à qui l'on confierait ces jetons ;
   - `CODEOWNERS` : toi sur la CI, les workflows et le déploiement.
 
 ## 12. Décisions prises et questions ouvertes

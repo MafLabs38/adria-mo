@@ -57,6 +57,13 @@ public sealed class PhotoSeriesGrouperTests
     }
 
     [Fact]
+    public void By_default_photos_more_than_five_minutes_apart_are_two_series()
+    {
+        new PhotoSeriesGrouper().MaxGap.Should().Be(TimeSpan.FromMinutes(5));
+        new PhotoSeriesGrouper().Group([At("a", 0), At("b", 6)]).Should().HaveCount(2);
+    }
+
+    [Fact]
     public void A_single_photo_is_a_series_that_starts_and_ends_with_it()
     {
         var only = new PhotoSeriesGrouper().Group([At("a", 0)]).Should().ContainSingle().Subject;

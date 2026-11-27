@@ -4,7 +4,7 @@ namespace AdriaMo.Core.Photos;
 /// Photos taken a few minutes apart, most likely of the same defect (spec §4.1): the inbox offers to attach a whole series to one
 /// constat at once.
 /// </summary>
-public sealed record PhotoSeries
+public sealed class PhotoSeries
 {
     /// <summary>Creates a series.</summary>
     /// <param name="photos">The photos of the series: at least one, oldest first. The list is copied.</param>

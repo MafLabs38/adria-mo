@@ -28,6 +28,9 @@ dotnet run --project src/AdriaMo.Api
 cd web && yarn install && yarn dev
 ```
 
+The site can live under a path of another site (spec §10.5): build it with `ADRIAMO_BASE=/constats/ yarn build`. This is a
+build-time variable of the site, distinct from the `ADRIAMO__*` settings of the back end.
+
 ## Tests and checks
 
 ```bash

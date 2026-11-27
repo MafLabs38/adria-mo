@@ -19,7 +19,10 @@ changing behaviour.
    suppression carries its justification.
 7. **One vertical = one pull request** into `develop`, with a Conventional Commit title, green CI and the review agents' findings
    answered in `docs/review-decisions/<pr>.md`.
-8. English in code, comments, commits and technical docs; French in the user interface and in the spec.
+8. **Files that judge a pull request are the maintainer's**: `.github/` (workflows, CODEOWNERS, approvers), `.claude/agents/`,
+   `tools/review-decisions/`, `docs/review-decisions/README.md` and this file. The assistant may propose a change to them, never
+   merge one on its own.
+9. English in code, comments, commits and technical docs; French in the user interface and in the spec.
 
 ## Commands
 

@@ -25,8 +25,10 @@ on:
 permissions:
   contents: read
 
+# A run started by another label (docs, skip-quality...) reviews nothing: it gets a group of its own, so that it never cancels
+# a review in progress. Every other run of the pull request shares one group, and the newest replaces the older one.
 concurrency:
-  group: ai-review-${{ github.event.pull_request.number }}
+  group: ai-review-${{ github.event.pull_request.number }}${{ github.event.action == 'labeled' && github.event.label.name != 'ai-review' && format('-other-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:

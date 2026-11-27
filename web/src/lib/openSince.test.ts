@@ -25,8 +25,12 @@ describe('daysOpen', () => {
     expect(daysOpen(new Date('2025-12-31T12:00:00Z'), new Date('2026-04-05T12:00:00Z'))).toBe(95);
   });
 
-  it('refuses a first observation after today', () => {
-    expect(() => daysOpen(new Date('2026-11-28T12:00:00Z'), new Date('2026-11-27T12:00:00Z'))).toThrow(RangeError);
+  it('counts zero when the clock of the visitor is behind the first observation', () => {
+    expect(daysOpen(new Date('2026-11-28T12:00:00Z'), new Date('2026-11-27T12:00:00Z'))).toBe(0);
+  });
+
+  it('refuses a date that is not valid', () => {
+    expect(() => daysOpen(new Date('not a date'), new Date('2026-11-27T12:00:00Z'))).toThrow(RangeError);
   });
 });
 
