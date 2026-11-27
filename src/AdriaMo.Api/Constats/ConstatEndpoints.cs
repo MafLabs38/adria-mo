@@ -24,7 +24,11 @@ internal static class ConstatEndpoints
         editor.MapPost("/constats", CreateAsync);
         editor.MapGet("/constats/{id:int}", GetAsync);
         editor.MapPut("/constats/{id:int}", UpdateAsync);
-        editor.MapPost("/constats/{id:int}/pieces", AddPieceAsync).DisableAntiforgery();
+        // No antiforgery token: the forgery defence of the API is the X-Adria-Mo header and the SameSite=Strict cookie
+        // (AppHeaderMiddleware). The only endpoint that takes a photo is the only one allowed a large body.
+        editor.MapPost("/constats/{id:int}/pieces", AddPieceAsync)
+            .DisableAntiforgery()
+            .WithMetadata(new RequestSizeLimitAttribute(PhotoIntake.MaxBytes + (1024 * 1024)));
         editor.MapGet("/photos/{name}", Photo);
         editor.MapGet("/publication", (PublicationStatus status) => TypedResults.Ok(status.Current));
         return api;
@@ -174,7 +178,7 @@ internal static class ConstatEndpoints
     {
         if (ConstatRules.CheckPiece(comment, photo is not null) is { } problem)
         {
-            return Invalid(problem == "Empty" ? "piece" : "text", problem);
+            return Invalid(problem.Field, problem.Code);
         }
 
         return photo?.Length switch

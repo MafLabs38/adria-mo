@@ -37,12 +37,6 @@ internal sealed class AuthOptions
     /// <summary>The section name.</summary>
     public const string Section = "Auth";
 
-    /// <summary>
-    /// Whether the session cookie is sent over HTTPS only. On by default; off only in a sandbox reached by plain HTTP on the local
-    /// network.
-    /// </summary>
-    public bool SecureCookie { get; set; } = true;
-
     /// <summary>Login attempts per minute from one address.</summary>
     [Range(1, 1000)]
     public int LoginAttemptsPerMinute { get; set; } = 10;

@@ -21,7 +21,8 @@ internal static class AccountEndpoints
         auth.MapPost("/login", LoginAsync).RequireRateLimiting(AccountsSetup.LoginLimiter);
         auth.MapPost("/logout", LogoutAsync);
         auth.MapGet("/me", MeAsync).RequireAuthorization();
-        auth.MapPost("/password", ChangePasswordAsync).RequireAuthorization();
+        // Limited like the login: a borrowed session must not try current passwords at full speed.
+        auth.MapPost("/password", ChangePasswordAsync).RequireAuthorization().RequireRateLimiting(AccountsSetup.LoginLimiter);
         return api;
     }
 
@@ -83,15 +84,15 @@ internal static class AccountEndpoints
             return Invalid("SameAsCurrent");
         }
 
-        // Checks the current password, the rules of the new one, and renews the security stamp: the other sessions end.
+        // Checks the current password and the rules of the new one, renews the security stamp (the other sessions end) and saves the
+        // end of the temporary password with the new hash, in one write.
+        user.MustChangePassword = false;
         var changed = await users.ChangePasswordAsync(user, request.CurrentPassword ?? "", request.NewPassword ?? "");
         if (!changed.Succeeded)
         {
             return Invalid([.. changed.Errors.Select(e => e.Code)]);
         }
 
-        user.MustChangePassword = false;
-        await users.UpdateAsync(user);
         await signIn.RefreshSignInAsync(user);
         return TypedResults.Ok(await MeOf(users, user, building));
     }

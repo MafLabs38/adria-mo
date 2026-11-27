@@ -9,8 +9,8 @@ public static class AccountRules
     /// <summary>Failed attempts before the account is locked.</summary>
     public const int MaxFailedAttempts = 5;
 
-    /// <summary>The shortest user name.</summary>
-    public const int UserNameMinLength = 2;
+    /// <summary>The shortest user name: a password must not contain it, so two letters would refuse too many sentences.</summary>
+    public const int UserNameMinLength = 3;
 
     /// <summary>The longest user name.</summary>
     public const int UserNameMaxLength = 64;

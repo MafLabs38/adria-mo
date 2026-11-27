@@ -31,6 +31,16 @@ export default function PublicConstatDetail({ data, list }: Readonly<Props>) {
   if (state.kind === 'loading') {
     return <p className="text-slate-600">Chargement…</p>;
   }
+  if (state.kind === 'error') {
+    return (
+      <div className="space-y-3">
+        <p role="alert" className="rounded-xl bg-red-50 p-3 text-red-900">
+          Ce constat ne peut pas être affiché pour l'instant. Réessayez dans un moment.
+        </p>
+        {back}
+      </div>
+    );
+  }
   const constat = state.kind === 'ready' ? state.snapshot.constats.find((c) => c.number === number) : undefined;
   if (state.kind !== 'ready' || constat === undefined) {
     return (

@@ -48,13 +48,13 @@ public sealed class ConstatRulesTests
     [InlineData(null, false, "Empty")]
     [InlineData("  ", false, "Empty")]
     public void A_piece_holds_a_photo_or_a_comment(string? text, bool hasPhoto, string? problem) =>
-        ConstatRules.CheckPiece(text, hasPhoto).Should().Be(problem);
+        ConstatRules.CheckPiece(text, hasPhoto).Should().Be(problem is null ? null : new FieldProblem("piece", problem));
 
     [Fact]
     public void A_comment_of_2000_characters_is_accepted_and_2001_are_too_long()
     {
         ConstatRules.CheckPiece(new string('x', 2000), false).Should().BeNull();
-        ConstatRules.CheckPiece(new string('x', 2001), true).Should().Be("TooLong");
+        ConstatRules.CheckPiece(new string('x', 2001), true).Should().Be(new FieldProblem("text", "TooLong"));
     }
 
     [Theory]

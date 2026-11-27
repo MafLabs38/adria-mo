@@ -28,6 +28,8 @@ builder.Services.AddAdriaMoAccounts();
 builder.Services.AddSingleton<PhotoIntake>();
 builder.Services.AddSingleton<PublishQueue>();
 builder.Services.AddSingleton<PublicationStatus>();
+builder.Services.AddSingleton<PublisherSettings>();
+builder.Services.AddSingleton<IPublishTarget, FolderPublishTarget>();
 builder.Services.AddSingleton<SnapshotPublisher>();
 builder.Services.AddHostedService(services => services.GetRequiredService<SnapshotPublisher>());
 builder.Services.AddHealthChecks();
@@ -40,7 +42,8 @@ builder.Services.Configure<ForwardedHeadersOptions>(o =>
     o.KnownIPNetworks.Clear();
     o.KnownProxies.Clear();
 });
-builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = PhotoIntake.MaxBytes + (1024 * 1024));
+// Small requests everywhere; the endpoint that takes a photo allows more (ConstatEndpoints).
+builder.WebHost.ConfigureKestrel(k => k.Limits.MaxRequestBodySize = 1024 * 1024);
 
 var app = builder.Build();
 

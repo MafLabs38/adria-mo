@@ -54,12 +54,13 @@ internal static class AccountsSetup
 
         services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
         services.AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
-            .Configure<IOptions<AuthOptions>>((cookie, auth) =>
+            .Configure(cookie =>
             {
-                cookie.Cookie.Name = auth.Value.SecureCookie ? "__Host-adriamo" : "adriamo";
+                // HTTPS only, always: the administration is reached by HTTPS, also in the sandbox.
+                cookie.Cookie.Name = "__Host-adriamo";
                 cookie.Cookie.HttpOnly = true;
                 cookie.Cookie.SameSite = SameSiteMode.Strict;
-                cookie.Cookie.SecurePolicy = auth.Value.SecureCookie ? CookieSecurePolicy.Always : CookieSecurePolicy.None;
+                cookie.Cookie.SecurePolicy = CookieSecurePolicy.Always;
                 cookie.Cookie.Path = "/";
                 cookie.ExpireTimeSpan = AccountRules.SessionLifetime;
                 cookie.SlidingExpiration = true;

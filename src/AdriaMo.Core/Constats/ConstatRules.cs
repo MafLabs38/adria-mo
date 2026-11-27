@@ -37,14 +37,21 @@ public static class ConstatRules
     /// <summary>Checks the comment of a piece.</summary>
     /// <param name="text">The comment, trimmed, or <c>null</c>.</param>
     /// <param name="hasPhoto">Whether the piece has a photo.</param>
-    /// <returns>The problem code, or <c>null</c>: a piece holds a photo or a comment, and a comment is not too long.</returns>
-    public static string? CheckPiece(string? text, bool hasPhoto)
+    /// <returns>The problem, or <c>null</c>: a piece holds a photo or a comment, and a comment is not too long.</returns>
+    public static FieldProblem? CheckPiece(string? text, bool hasPhoto)
     {
         if (string.IsNullOrWhiteSpace(text) && !hasPhoto)
         {
-            return "Empty";
+            return new FieldProblem("piece", "Empty");
         }
 
-        return text?.Length > Constat.TextMaxLength ? "TooLong" : null;
+        return text?.Length > Constat.TextMaxLength ? new FieldProblem("text", "TooLong") : null;
     }
+}
+
+/// <summary>A problem of one field: the name of the field and the code the interface says in French.</summary>
+/// <param name="Field">The field.</param>
+/// <param name="Code">The code.</param>
+public sealed record FieldProblem(string Field, string Code)
+{
 }

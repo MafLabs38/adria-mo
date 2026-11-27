@@ -99,7 +99,7 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
               required
               autoCapitalize="none"
               autoComplete="off"
-              pattern="[A-Za-z0-9._\-]{2,64}"
+              pattern="[A-Za-z0-9._\-]{3,64}"
               value={userName}
               onChange={(e) => setUserName(e.target.value)}
             />

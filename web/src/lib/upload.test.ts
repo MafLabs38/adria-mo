@@ -51,14 +51,24 @@ describe('uploadPieces', () => {
     expect(sent).toEqual([]);
   });
 
-  it('goes on after a refused photo and reports it', async () => {
-    const { api } = recorder('a.jpg');
+  it('goes on after a refused photo, reports it, and gives the comment to the next photo', async () => {
+    const { api, sent } = recorder('a.jpg');
 
-    const outcomes = await uploadPieces(api, 7, [photo('a.jpg'), photo('b.jpg')], '');
+    const outcomes = await uploadPieces(api, 7, [photo('a.jpg'), photo('b.jpg')], 'Gond arraché');
 
     expect(outcomes.map((o) => [o.file, o.error === null])).toEqual([
       ['a.jpg', false],
       ['b.jpg', true],
     ]);
+    expect(sent.map((s) => s.text)).toEqual(['Gond arraché', 'Gond arraché']);
+  });
+
+  it('sends the comment alone when every photo is refused', async () => {
+    const { api, sent } = recorder('a.jpg');
+
+    const outcomes = await uploadPieces(api, 7, [photo('a.jpg')], 'Gond arraché');
+
+    expect(sent.at(-1)).toEqual({ path: '/constats/7/pieces', photo: null, text: 'Gond arraché' });
+    expect(outcomes.map((o) => o.error === null)).toEqual([false, true]);
   });
 });

@@ -14,8 +14,6 @@ services:
       ADRIAMO__STORAGE__PUBLISHFOLDER: /publish
       ADRIAMO__AUTH__BOOTSTRAPUSERNAME: ${ADRIAMO_SUPER_ADMIN:?the user name of the super-admin}
       ADRIAMO__AUTH__BOOTSTRAPPASSWORDFILE: /run/secrets/super-admin-password
-      # Sandbox only: the sandbox is also reached by plain HTTP on the local network, where a Secure cookie is not kept.
-      ADRIAMO__AUTH__SECURECOOKIE: ${ADRIAMO_SECURE_COOKIE:-false}
       ADRIAMO__NETWORK__BEHINDPROXY: "true"
       ADRIAMO__PUBLISH__DELAY: ${ADRIAMO_PUBLISH_DELAY:-00:00:03}
     volumes:
@@ -38,6 +36,7 @@ services:
       - ${ADRIAMO_PORT:-8490}:8080
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - ${ADRIAMO_SITE:-../../web/dist}:/site:ro
       - ${ADRIAMO_STATE}/publish:/publish:ro
     read_only: true

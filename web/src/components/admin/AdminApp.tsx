@@ -48,8 +48,8 @@ interface PageProps {
   me: Me;
   hash: string;
   onMe: (me: Me) => void;
-  /** The photos refused when the constat was created, shown on its page. */
-  failures: string[];
+  /** The photos refused when a constat was created, shown on the page of that constat only. */
+  failures: { number: number; files: string[] } | null;
   onCreated: (number: number, failures: string[]) => void;
 }
 
@@ -66,7 +66,8 @@ function Page({ api, me, hash, onMe, failures, onCreated }: Readonly<PageProps>)
   const match = /^#\/constats\/(\d+)$/.exec(hash);
   if (match?.[1]) {
     const number = Number(match[1]);
-    return <ConstatEditor key={number} api={api} number={number} failures={failures} timeZone={me.timeZone} />;
+    const refused = failures?.number === number ? failures.files : [];
+    return <ConstatEditor key={number} api={api} number={number} failures={refused} timeZone={me.timeZone} />;
   }
   return <ConstatList api={api} timeZone={me.timeZone} />;
 }
@@ -74,10 +75,10 @@ function Page({ api, me, hash, onMe, failures, onCreated }: Readonly<PageProps>)
 export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {
   const api = useMemo(() => new Api(apiBase), [apiBase]);
   const [session, setSession] = useState<Session>({ kind: 'loading' });
-  const [failures, setFailures] = useState<string[]>([]);
+  const [failures, setFailures] = useState<{ number: number; files: string[] } | null>(null);
   const hash = useHash();
   const created = (number: number, refused: string[]) => {
-    setFailures(refused);
+    setFailures({ number, files: refused });
     globalThis.location.hash = `#/constats/${number}`;
   };
 

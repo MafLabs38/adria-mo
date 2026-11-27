@@ -14,5 +14,11 @@ export default defineConfig({
   integrations: [react()],
   vite: {
     plugins: [tailwindcss()],
+    // `yarn dev` only: the administration calls /api/v1 on its own origin, as behind the static server of the sandbox.
+    server: {
+      proxy: {
+        '/api': process.env.ADRIAMO_DEV_API ?? 'http://localhost:5080',
+      },
+    },
   },
 });

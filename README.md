@@ -23,11 +23,14 @@ Requirements: .NET SDK 10, Node.js 22.23 or later, Yarn 1.
 ```bash
 # Back end on http://localhost:5080 (health: /health/live, info: /api/v1/info). It needs a data folder and a publish
 # folder, and creates the super-admin at first start from a user name and a password file (12 characters or more).
+mkdir -p /tmp/adria && printf 'une phrase de test\n' > /tmp/adria/password
 ADRIAMO__STORAGE__DATAFOLDER=/tmp/adria/data ADRIAMO__STORAGE__PUBLISHFOLDER=/tmp/adria/publish \
 ADRIAMO__AUTH__BOOTSTRAPUSERNAME=chef ADRIAMO__AUTH__BOOTSTRAPPASSWORDFILE=/tmp/adria/password \
   dotnet run --project src/AdriaMo.Api
 
-# Public site on http://localhost:4321
+# Site on http://localhost:4321; the administration (/admin/) reaches the back end through the dev server's proxy
+# (ADRIAMO_DEV_API, default http://localhost:5080). The public page reads the published snapshot under /data/, which the dev
+# server does not serve: point it at a sandbox with PUBLIC_ADRIAMO_DATA_URL, or run the sandbox.
 cd web && yarn install && yarn dev
 ```
 

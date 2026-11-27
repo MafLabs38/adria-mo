@@ -262,8 +262,10 @@ non validée, aucun original de photo.
 Adresses (production) : la partie publique sous `adria-residents.fr/constats` (§ 10.5) ou sur sa
 propre adresse. **L'administration et son API sont servies sous une même adresse** (un sous-domaine
 d'`adria-residents.fr`, la zone est déjà chez Cloudflare) : les pages d'administration et `/api/` y
-sont routées par le tunnel, comme le fait le serveur statique du bac à sable. Le cookie de session
-et l'en-tête propre à l'application n'ont ainsi besoin d'aucune autorisation entre sites (CORS).
+sont routées par le tunnel vers le serveur statique de la maison (le même que celui du bac à sable :
+le front construit et le passage vers `/api/`). Le cookie de session et l'en-tête propre à
+l'application n'ont ainsi besoin d'aucune autorisation entre sites (CORS). La version envoyée sur
+Cloudflare Pages ne contient pas les pages d'administration.
 
 Coût : 0 € (Pages, R2, tunnel en formule gratuite). Les clés d'écriture R2 sont un secret du
 back-end (fichier monté), jamais dans le dépôt.
@@ -362,7 +364,11 @@ Décidé le 2026-11-27 (verticale 1a) : la base passe par **Entity Framework Cor
 plutôt que FluentMigrator (ASP.NET Core Identity s'appuie déjà dessus) ; le téléphone envoie
 **l'original de la photo** (il porte l'empreinte et la date), le serveur en tire la version publiée
 (la réduction dans le navigateur, pour la 4G, viendra avec l'envoi différé) ; l'administration et
-son API partagent une adresse (§ 10.3) ; une photo de plus de 64 millions de pixels est refusée.
+son API partagent une adresse (§ 10.3) ; une photo de plus de 40 millions de pixels est refusée ;
+l'adresse d'un constat est `…/constat/?n=42` (une page statique lit le numéro ; `…/constats/42`
+pourra venir plus tard, en redirection) ; un constat est **visible sur la page publique par défaut**,
+l'administrateur décoche s'il veut le garder pour lui ; le cookie de session est toujours `Secure` :
+l'administration passe par HTTPS, y compris dans le bac à sable.
 
 Encore ouvert :
 

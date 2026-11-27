@@ -57,6 +57,11 @@ internal static class UserEndpoints
 
         var user = new AdriaMoUser { UserName = userName, MustChangePassword = true, CreatedAt = time.GetUtcNow() };
         var created = await users.CreateAsync(user, request.TemporaryPassword ?? "");
+        if (created.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName)))
+        {
+            return TypedResults.Conflict();
+        }
+
         if (!created.Succeeded)
         {
             return Invalid(created);
@@ -69,7 +74,7 @@ internal static class UserEndpoints
             return TypedResults.Problem("The account could not be given its role.", statusCode: StatusCodes.Status500InternalServerError);
         }
 
-        return TypedResults.Created($"/api/v1/users/{user.Id}", new UserSummary(user.Id, userName, [Roles.Admin], true, null));
+        return TypedResults.Created((string?)null, new UserSummary(user.Id, userName, [Roles.Admin], true, null));
     }
 
     private static async Task<Results<NoContent, NotFound, ValidationProblem, ProblemHttpResult>> ResetPasswordAsync(

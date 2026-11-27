@@ -31,7 +31,6 @@ public sealed class BackgroundPublisherTests
     }
 
     [Fact]
-    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
     public async Task A_failed_publication_keeps_the_previous_snapshot_and_is_tried_again()
     {
         await using var factory = new ClockFactory();
@@ -41,33 +40,27 @@ public sealed class BackgroundPublisherTests
         var snapshot = Path.Join(factory.PublishFolder, SnapshotPublisher.SnapshotFile);
         var before = await File.ReadAllTextAsync(snapshot, Ct);
 
-        // The publish folder cannot be written: the publication fails, the public page keeps what it had.
-        File.SetUnixFileMode(factory.PublishFolder, UnixFileMode.UserRead | UnixFileMode.UserExecute);
-        try
-        {
-            await ConstatApiTests.CreateAsync(admin);
-            await AdvanceUntilAsync(factory.Clock, () => status.Current.LastError);
-            (await File.ReadAllTextAsync(snapshot, Ct)).Should().Be(before);
-            (await admin.GetFromJsonAsync<PublicationState>("/api/v1/publication", Ct))!.LastError.Should().NotBeNull();
-        }
-        finally
-        {
-            File.SetUnixFileMode(factory.PublishFolder, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        }
+        // The target refuses to write: the publication fails, the public page keeps what it had.
+        factory.Target.Failing = true;
+        await ConstatApiTests.CreateAsync(admin);
+        await AdvanceUntilAsync(factory.Clock, () => status.Current.LastError);
+        (await File.ReadAllTextAsync(snapshot, Ct)).Should().Be(before);
+        (await admin.GetFromJsonAsync<PublicationState>("/api/v1/publication", Ct))!.LastError.Should().Be(nameof(IOException));
 
-        // Tried again after the first retry delay, without any new change.
+        // Tried again after the retry delay, without any new change.
+        factory.Target.Failing = false;
         await AdvanceUntilAsync(factory.Clock, () => status.Current.LastError is null ? status.Current.LastSuccessAt : null);
         (await File.ReadAllTextAsync(snapshot, Ct)).Should().NotBe(before);
     }
 
     /// <summary>
     /// Moves the simulated clock a second at a time until the background work, which runs on its own thread, gives a value: a few
-    /// real seconds at most.
+    /// real seconds at most (generous for a loaded runner).
     /// </summary>
     private static async Task<T> AdvanceUntilAsync<T>(FakeTimeProvider clock, Func<T?> read)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Ct);
-        deadline.CancelAfter(TimeSpan.FromSeconds(10));
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
         var value = read();
         while (value is null)
         {
@@ -85,10 +78,33 @@ public sealed class BackgroundPublisherTests
 
         protected override IDictionary<string, string?> Settings => new Dictionary<string, string?> { ["Publish:Delay"] = "00:00:30" };
 
+        public FlakyTarget Target { get; private set; } = null!;
+
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             base.ConfigureWebHost(builder);
-            builder.ConfigureTestServices(services => services.AddSingleton<TimeProvider>(Clock));
+            builder.ConfigureTestServices(services =>
+            {
+                services.AddSingleton<TimeProvider>(Clock);
+                services.AddSingleton<FolderPublishTarget>();
+                services.AddSingleton<IPublishTarget>(provider => Target = new FlakyTarget(provider.GetRequiredService<FolderPublishTarget>()));
+            });
         }
+    }
+
+    /// <summary>The folder target, which fails on demand as a full disk or an unreachable R2 would.</summary>
+    internal sealed class FlakyTarget(IPublishTarget inner) : IPublishTarget
+    {
+        public bool Failing { get; set; }
+
+        public Task<IReadOnlySet<string>> ListPhotosAsync(CancellationToken cancellationToken) => inner.ListPhotosAsync(cancellationToken);
+
+        public Task PutPhotoAsync(string name, string source, CancellationToken cancellationToken) =>
+            Failing ? throw new IOException("disk full") : inner.PutPhotoAsync(name, source, cancellationToken);
+
+        public Task PutSnapshotAsync(byte[] content, CancellationToken cancellationToken) =>
+            Failing ? throw new IOException("disk full") : inner.PutSnapshotAsync(content, cancellationToken);
+
+        public Task DeletePhotoAsync(string name, CancellationToken cancellationToken) => inner.DeletePhotoAsync(name, cancellationToken);
     }
 }

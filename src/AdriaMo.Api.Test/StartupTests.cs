@@ -23,16 +23,6 @@ public sealed class StartupTests
     }
 
     [Fact]
-    public async Task A_sandbox_reached_by_plain_http_can_have_a_cookie_without_secure()
-    {
-        await using var factory = new SettingsFactory(new() { ["Auth:SecureCookie"] = "false" });
-        var response = await factory.Client().PostAsJsonAsync("/api/v1/auth/login", new { userName = AdriaMoFactory.SuperAdmin, password = AdriaMoFactory.SuperAdminPassword }, Ct);
-
-        var cookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("adriamo=", StringComparison.Ordinal)).ToLowerInvariant();
-        cookie.Should().NotContain("secure").And.Contain("httponly").And.Contain("samesite=strict");
-    }
-
-    [Fact]
     public async Task A_super_admin_password_breaking_the_rules_stops_the_start()
     {
         await using var factory = new SettingsFactory([], bootstrapPassword: "court");

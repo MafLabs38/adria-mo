@@ -9,7 +9,11 @@ interface Props {
 export default function PhotoPicker({ files, onChange }: Readonly<Props>) {
   const cameraId = useId();
   const galleryId = useId();
-  const add = (list: FileList | null) => onChange([...files, ...Array.from(list ?? [])]);
+  const add = (input: HTMLInputElement) => {
+    onChange([...files, ...Array.from(input.files ?? [])]);
+    // Emptied, so the same photo can be chosen again after "Retirer".
+    input.value = '';
+  };
   const button =
     'flex-1 cursor-pointer rounded-xl bg-accent-400 px-3 py-3 text-center font-semibold text-slate-900 hover:bg-accent-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-700';
 
@@ -26,7 +30,7 @@ export default function PhotoPicker({ files, onChange }: Readonly<Props>) {
             accept="image/*"
             capture="environment"
             className="sr-only"
-            onChange={(e) => add(e.target.files)}
+            onChange={(e) => add(e.target)}
           />
         </label>
         <label htmlFor={galleryId} className={button}>
@@ -38,7 +42,7 @@ export default function PhotoPicker({ files, onChange }: Readonly<Props>) {
             accept="image/*"
             multiple
             className="sr-only"
-            onChange={(e) => add(e.target.files)}
+            onChange={(e) => add(e.target)}
           />
         </label>
       </div>

@@ -56,7 +56,8 @@ test('@stack from a new account to a constat on the public page', async ({ page 
   await expectImagesLoaded(page, 'img[alt="Pièce du constat"]');
   await expectNoHorizontalScroll(page);
 
-  // The publication gathers changes a few seconds, then the public page shows the constat and its photo, without GPS.
+  // The publication gathers changes a few seconds, then the public page shows the constat and its photo (the API tests check
+  // that the published copy carries no metadata).
   await expect(async () => {
     await page.goto('./');
     await expect(page.getByRole('link', { name: /Porte du local poubelles forcée/ })).toBeVisible({ timeout: 1000 });
@@ -65,8 +66,5 @@ test('@stack from a new account to a constat on the public page', async ({ page 
   await expect(page.getByText('Serrure arrachée')).toBeVisible();
   await expect(page.getByText(/constaté le 23 novembre 2026/)).toBeVisible();
   await expectImagesLoaded(page, 'article img');
-  const published = await page.locator('article img').first().getAttribute('src');
-  const bytes = await (await page.request.get(published ?? '')).body();
-  expect(bytes.includes(Buffer.from('Exif'))).toBe(false);
   expect(errors).toEqual([]);
 });

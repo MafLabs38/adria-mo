@@ -25,12 +25,9 @@ internal sealed partial class AccountBootstrap(
     {
         await using var scope = services.CreateAsyncScope();
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-        foreach (var role in Roles.All)
+        foreach (var role in Roles.All.Where(r => !roles.Roles.Any(existing => existing.Name == r)))
         {
-            if (!await roles.RoleExistsAsync(role))
-            {
-                Check(await roles.CreateAsync(new IdentityRole(role)), $"create the role {role}");
-            }
+            Check(await roles.CreateAsync(new IdentityRole(role)), $"create the role {role}");
         }
 
         var users = scope.ServiceProvider.GetRequiredService<UserManager<AdriaMoUser>>();

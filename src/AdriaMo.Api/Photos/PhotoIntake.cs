@@ -19,10 +19,11 @@ internal sealed class PhotoIntake : IDisposable
     public const long MaxBytes = 25 * 1024 * 1024;
 
     /// <summary>
-    /// The largest photo accepted, in pixels: a small file can claim a huge image. Phones save 12 to 50 megapixels by default; a
-    /// format the codec cannot decode at a smaller scale (PNG) then holds 4 bytes a pixel, 256 MB at most.
+    /// The largest photo accepted, in pixels: a small file can claim a huge image. Phones save 12 to 50 megapixels by default, as
+    /// JPEG, which is decoded at a reduced scale. A format decoded at full size (PNG) holds 4 bytes a pixel: 160 MB at most, the
+    /// reduced copies being small, times <see cref="Parallelism"/>.
     /// </summary>
-    public const long MaxPixels = 64_000_000;
+    public const long MaxPixels = 40_000_000;
 
     /// <summary>Photos decoded at once: each holds a few hundred megabytes while it is reduced.</summary>
     public const int Parallelism = 2;
@@ -103,9 +104,8 @@ internal sealed class PhotoIntake : IDisposable
             System.IO.Directory.CreateDirectory(_derived);
             await WriteOnceAsync(Path.Join(_originals, originalName), content, cancellationToken);
 
-            using var upright = Upright(decoded, codec.EncodedOrigin);
-            var (publishedName, width, height) = await WriteReducedAsync(upright, PublishedSize, 82, cancellationToken);
-            var (thumbnailName, _, _) = await WriteReducedAsync(upright, ThumbnailSize, 75, cancellationToken);
+            var (publishedName, width, height) = await WriteReducedAsync(decoded, codec.EncodedOrigin, PublishedSize, 82, cancellationToken);
+            var (thumbnailName, _, _) = await WriteReducedAsync(decoded, codec.EncodedOrigin, ThumbnailSize, 75, cancellationToken);
             return new IntakeResult(
                 new IntakenPhoto(new PiecePhoto(sha256, originalName, publishedName, thumbnailName, width, height), TakenAt(content)),
                 null);
@@ -128,14 +128,21 @@ internal sealed class PhotoIntake : IDisposable
         var size = codec.GetScaledDimensions(scale);
         var info = new SKImageInfo(size.Width, size.Height, SKImageInfo.PlatformColorType, SKAlphaType.Premul);
         var bitmap = new SKBitmap(info);
-        var result = codec.GetPixels(info, bitmap.GetPixels());
-        if (result is SKCodecResult.Success or SKCodecResult.IncompleteInput)
+        try
         {
-            return bitmap;
-        }
+            if (codec.GetPixels(info, bitmap.GetPixels()) is SKCodecResult.Success or SKCodecResult.IncompleteInput)
+            {
+                var decoded = bitmap;
+                bitmap = null;
+                return decoded;
+            }
 
-        bitmap.Dispose();
-        return null;
+            return null;
+        }
+        finally
+        {
+            bitmap?.Dispose();
+        }
     }
 
     private DateTimeOffset? TakenAt(byte[] content)
@@ -157,20 +164,28 @@ internal sealed class PhotoIntake : IDisposable
         }
     }
 
-    private async Task<(string Name, int Width, int Height)> WriteReducedAsync(SKBitmap source, int longestSide, int quality, CancellationToken cancellationToken)
+    /// <summary>Reduces, then turns upright: the turn works on the small copy, never on the full image.</summary>
+    private async Task<(string Name, int Width, int Height)> WriteReducedAsync(
+        SKBitmap source,
+        SKEncodedOrigin origin,
+        int longestSide,
+        int quality,
+        CancellationToken cancellationToken)
     {
         var scale = Math.Min(1d, (double)longestSide / Math.Max(source.Width, source.Height));
         var width = Math.Max(1, (int)Math.Round(source.Width * scale));
         var height = Math.Max(1, (int)Math.Round(source.Height * scale));
         using var resized = source.Resize(new SKImageInfo(width, height), new SKSamplingOptions(SKCubicResampler.Mitchell))
             ?? throw new InvalidOperationException("The photo could not be resized.");
-        using var image = SKImage.FromBitmap(resized);
+        using var upright = origin == SKEncodedOrigin.TopLeft ? null : Upright(resized, origin);
+        var shown = upright ?? resized;
+        using var image = SKImage.FromBitmap(shown);
         // Skia writes no metadata: no EXIF, so no GPS position, no camera serial number.
         using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, quality);
         var bytes = encoded.ToArray();
         var name = Convert.ToHexStringLower(SHA256.HashData(bytes)) + ".jpg";
         await WriteOnceAsync(Path.Join(_derived, name), bytes, cancellationToken);
-        return (name, width, height);
+        return (name, shown.Width, shown.Height);
     }
 
     /// <summary>Turns the pixels the way the camera said the phone was held.</summary>

@@ -21,6 +21,8 @@ public sealed class PublishingTests(AdriaMoFactory factory) : IClassFixture<Adri
 
         var snapshot = await PublishAsync();
 
+        // The administration sees every constat; the public page only the public ones.
+        (await admin.GetFromJsonAsync<Constats.ConstatSummary[]>("/api/v1/constats", Ct)).Should().Contain(c => c.Number == hidden && !c.IsPublic);
         var numbers = snapshot.RootElement.GetProperty("constats").EnumerateArray().Select(c => c.GetProperty("number").GetInt32()).ToArray();
         numbers.Should().Contain(shown).And.NotContain(hidden);
         var constat = snapshot.RootElement.GetProperty("constats").EnumerateArray().Single(c => c.GetProperty("number").GetInt32() == shown);

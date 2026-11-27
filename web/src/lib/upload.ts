@@ -8,7 +8,8 @@ export interface UploadOutcome {
 
 /**
  * Adds pieces to a constat, one request per photo so a large batch goes through a slow wifi one photo at a time. The comment goes
- * with the first photo, or alone when there is no photo. Every outcome is returned: one refused photo does not stop the others.
+ * with the first photo accepted, or alone when no photo is: a refused photo never loses it. Every outcome is returned: one
+ * refused photo does not stop the others.
  */
 export async function uploadPieces(
   api: Pick<Api, 'post'>,
@@ -17,19 +18,22 @@ export async function uploadPieces(
   comment: string,
   onProgress: (done: number, total: number) => void = () => undefined,
 ): Promise<UploadOutcome[]> {
-  const text = comment.trim();
+  let text = comment.trim();
   const outcomes: UploadOutcome[] = [];
-  if (files.length === 0) {
-    if (text) {
-      outcomes.push(await send(api, constat, null, text));
-    }
-    return outcomes;
-  }
   for (const [index, file] of files.entries()) {
     onProgress(index, files.length);
-    outcomes.push(await send(api, constat, file, index === 0 ? text : ''));
+    const outcome = await send(api, constat, file, text);
+    if (outcome.error === null) {
+      text = '';
+    }
+    outcomes.push(outcome);
   }
-  onProgress(files.length, files.length);
+  if (files.length > 0) {
+    onProgress(files.length, files.length);
+  }
+  if (text) {
+    outcomes.push(await send(api, constat, null, text));
+  }
   return outcomes;
 }
 

@@ -10,6 +10,22 @@ using Microsoft.Extensions.Options;
 
 namespace AdriaMo.Api.Publishing;
 
+/// <summary>The settings the publisher reads.</summary>
+/// <param name="publish">The publication settings.</param>
+/// <param name="storage">The storage settings.</param>
+/// <param name="building">The building settings.</param>
+internal sealed class PublisherSettings(IOptions<PublishOptions> publish, IOptions<StorageOptions> storage, IOptions<BuildingOptions> building)
+{
+    /// <summary>How long changes are gathered.</summary>
+    public TimeSpan Delay => publish.Value.Delay;
+
+    /// <summary>The private data folder, which holds the derived photos.</summary>
+    public string DataFolder => storage.Value.DataFolder;
+
+    /// <summary>The building's time zone.</summary>
+    public string TimeZone => building.Value.TimeZone;
+}
+
 /// <summary>Asks for a publication; the requests made during the gathering delay give one publication.</summary>
 internal sealed class PublishQueue
 {
@@ -35,18 +51,16 @@ internal sealed class PublishQueue
 /// <param name="services">The root services.</param>
 /// <param name="queue">The requests.</param>
 /// <param name="status">The outcome of the publications.</param>
-/// <param name="options">The publication settings.</param>
-/// <param name="storage">The storage settings.</param>
-/// <param name="building">The building settings.</param>
+/// <param name="target">Where the snapshot goes.</param>
+/// <param name="settings">The settings it needs.</param>
 /// <param name="time">The clock.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class SnapshotPublisher(
     IServiceProvider services,
     PublishQueue queue,
     PublicationStatus status,
-    IOptions<PublishOptions> options,
-    IOptions<StorageOptions> storage,
-    IOptions<BuildingOptions> building,
+    IPublishTarget target,
+    PublisherSettings settings,
     TimeProvider time,
     ILogger<SnapshotPublisher> logger) : BackgroundService
 {
@@ -75,7 +89,7 @@ internal sealed partial class SnapshotPublisher(
         {
             if (await WaitForRequestAsync(succeeded ? Daily : retry, stoppingToken))
             {
-                await Task.Delay(options.Value.Delay, time, stoppingToken);
+                await Task.Delay(settings.Delay, time, stoppingToken);
             }
 
             while (queue.Reader.TryRead(out _))
@@ -133,36 +147,24 @@ internal sealed partial class SnapshotPublisher(
         var db = scope.ServiceProvider.GetRequiredService<AdriaMoDbContext>();
         var constats = await db.Constats.AsNoTracking().Include(c => c.Pieces).ToListAsync(cancellationToken);
 
-        var target = storage.Value.PublishFolder;
-        var photos = Path.Join(target, PublicSnapshotBuilder.PhotoFolder);
-        Directory.CreateDirectory(photos);
-
-        var derived = Path.Join(storage.Value.DataFolder, PhotoIntake.DerivedFolder);
+        var derived = Path.Join(settings.DataFolder, PhotoIntake.DerivedFolder);
         bool IsAvailable(PiecePhoto photo) =>
             File.Exists(Path.Join(derived, photo.PublishedFileName)) && File.Exists(Path.Join(derived, photo.ThumbnailFileName));
         var files = PublicSnapshotBuilder.PublishedFiles(constats, IsAvailable);
-        foreach (var file in files)
+        var snapshot = PublicSnapshotBuilder.Build(constats, time.GetUtcNow(), settings.TimeZone, IsAvailable);
+
+        // The order keeps every published snapshot whole: its photos first, then the snapshot, then the photos it no longer shows.
+        var published = await target.ListPhotosAsync(cancellationToken);
+        foreach (var file in files.Where(f => !published.Contains(f)))
         {
-            var destination = Path.Join(photos, file);
-            if (!File.Exists(destination))
-            {
-                File.Copy(Path.Join(derived, file), destination);
-            }
+            await target.PutPhotoAsync(file, Path.Join(derived, file), cancellationToken);
         }
 
-        var snapshot = PublicSnapshotBuilder.Build(constats, time.GetUtcNow(), building.Value.TimeZone, IsAvailable);
-        var temporary = Path.Join(target, SnapshotFile + ".tmp");
-        await using (var stream = File.Create(temporary))
-        {
-            await JsonSerializer.SerializeAsync(stream, snapshot, Json, cancellationToken);
-        }
+        await target.PutSnapshotAsync(JsonSerializer.SerializeToUtf8Bytes(snapshot, Json), cancellationToken);
 
-        File.Move(temporary, Path.Join(target, SnapshotFile), overwrite: true);
-
-        // After the new snapshot: a page never refers to a photo already removed.
-        foreach (var stale in Directory.EnumerateFiles(photos).Where(f => !files.Contains(Path.GetFileName(f))))
+        foreach (var stale in published.Where(f => !files.Contains(f)))
         {
-            File.Delete(stale);
+            await target.DeletePhotoAsync(stale, cancellationToken);
         }
 
         LogPublished(logger, snapshot.Constats.Count, files.Count);

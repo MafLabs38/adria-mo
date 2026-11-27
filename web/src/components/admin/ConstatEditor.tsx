@@ -106,10 +106,15 @@ export default function ConstatEditor({
       setNotice(`Envoi : ${done} sur ${total}…`),
     );
     const refused = outcomes.filter((o) => o.error !== null);
-    setNotice(refused.length > 0 ? null : 'Pièces ajoutées.');
-    setError(refused.length > 0 ? refused[0]?.error : null);
+    setNotice(
+      refused.length > 0 ? `Refusé : ${refused.map((o) => o.file || 'commentaire').join(', ')}` : 'Pièces ajoutées.',
+    );
+    setError(refused[0]?.error ?? null);
     setFiles([]);
-    setComment('');
+    // A comment is sent with an accepted photo, or alone at the end; when that last send was refused, it stays in the form.
+    if (!refused.some((o) => o.file === '')) {
+      setComment('');
+    }
     setBusy(false);
     reload();
   };

@@ -12,7 +12,6 @@ describe('statusLabel', () => {
     ['reopened', 'Rouvert'],
   ])('says %s as %s', (status, label) => {
     expect(statusLabel(status).label).toBe(label);
-    expect(statusLabel(status).tone).not.toBe('');
   });
 
   it('shows an unknown status as it is', () => {

@@ -45,6 +45,8 @@ const snapshot = {
 };
 
 test.beforeEach(async ({ page }) => {
+  // The page counts the days against the browser's clock: frozen at the instant the snapshot was built from.
+  await page.clock.setFixedTime(now);
   await page.route('**/data/constats.json', (route) => route.fulfill({ json: snapshot }));
   await page.route('**/data/photos/*', (route) => route.fulfill({ body: photo, contentType: 'image/jpeg' }));
 });
