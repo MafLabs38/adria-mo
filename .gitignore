@@ -1,0 +1,30 @@
+# .NET
+bin/
+obj/
+TestResults/
+*.user
+.vs/
+StrykerOutput/
+
+# Coverage
+coverage/
+
+# Editors and OS
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local data and secrets: never in this public repository
+.env
+.env.*
+*.db
+*.db-shm
+*.db-wal
+data/
+secrets/
+
+# Playwright MCP captures
+.playwright-mcp/
+
+# Python
+__pycache__/

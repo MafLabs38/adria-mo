@@ -1,0 +1,37 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+
+const { title, description } = Astro.props;
+// The site may live under a path of another site (spec §10.5): every link starts from the base, never from '/'.
+const base = import.meta.env.BASE_URL;
+const favicon = `${base.replace(/\/$/, '')}/favicon.svg`;
+---
+
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <link rel="icon" type="image/svg+xml" href={favicon} />
+    <title>{title}</title>
+  </head>
+  <body class="min-h-dvh bg-brand-50 text-slate-900">
+    <header class="bg-brand-700 text-white">
+      <div class="mx-auto max-w-3xl px-4 py-3">
+        <a href={base} class="font-display text-xl font-extrabold tracking-tight">
+          Adria MO
+        </a>
+        <p class="text-sm text-brand-100">Les constats des parties communes</p>
+      </div>
+    </header>
+    <main class="mx-auto max-w-3xl px-4 py-6">
+      <slot />
+    </main>
+  </body>
+</html>

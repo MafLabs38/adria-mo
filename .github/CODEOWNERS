@@ -1,0 +1,5 @@
+# The maintainer reviews what runs with the repository's secrets or decides what ships.
+/.github/   @Maf38
+/.claude/   @Maf38
+/Dockerfile @Maf38
+/tools/     @Maf38

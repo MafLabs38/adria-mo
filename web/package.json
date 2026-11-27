@@ -1,0 +1,46 @@
+{
+  "name": "adria-mo-web",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "stryker": "stryker"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "astro": "^7.4.13",
+    "tailwindcss": "^4.3.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.57.0",
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
+    "@types/node": "22",
+    "@vitest/coverage-v8": "^5.1.2",
+    "eslint": "^10.15.0",
+    "eslint-plugin-astro": "^3.2.2",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-sonarjs": "^4.2.3",
+    "eslint-plugin-unicorn": "^80.0.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.7.3",
+    "prettier-plugin-astro": "^1.1.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.48.0",
+    "vitest": "^5.1.2"
+  }
+}

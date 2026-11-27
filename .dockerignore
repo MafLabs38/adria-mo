@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+**/node_modules/
+web/
+docs/
+.git/
+.github/
+.claude/
+tools/
+coverage/
+TestResults/
