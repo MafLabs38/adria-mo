@@ -51,16 +51,29 @@ export default function OutboxPanel({ outbox }: Readonly<{ outbox: Outbox }>) {
         {outbox.items === null ? 'Lecture des photos en attente…' : waitingText(waiting.length, outbox.stopped)}
       </output>
       {refused.length > 0 ? (
-        <ul className="space-y-1 text-sm" aria-label="Photos refusées">
+        <ul className="space-y-1 text-sm" aria-label="Photos mises de côté">
           {refused.map((item) => (
             <li
               key={item.id}
-              className="flex items-center justify-between gap-2 rounded-lg bg-red-50 px-2 py-1 text-red-900"
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-red-50 px-2 py-1 text-red-900"
             >
-              <span className="truncate">
+              <span className="min-w-0 flex-1 truncate">
                 {item.name} : {message(item.refused ?? '')}
               </span>
-              <button type="button" className="underline" onClick={() => void outbox.remove(item.id)}>
+              {item.refused === 'ServerError' ? (
+                <button type="button" className="font-semibold underline" onClick={() => void outbox.retry(item.id)}>
+                  Réessayer
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="underline"
+                onClick={() => {
+                  if (globalThis.confirm(`Retirer « ${item.name} » ? Elle sera effacée de ce téléphone.`)) {
+                    void outbox.remove(item.id);
+                  }
+                }}
+              >
                 Retirer
               </button>
             </li>

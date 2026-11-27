@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { OutboxItem, OutboxStore } from './outbox';
 import {
   acceptShare,
   apiPathOf,
   cacheFirst,
+  cacheName,
   keepOnly,
   MAX_OUTBOX,
   MAX_SHARED,
@@ -55,6 +56,10 @@ describe('routeOf', () => {
 
   it('keeps the page of the administration and the scripts named by their content', () => {
     expect(route('GET', '/constats/admin/', 'navigate')).toBe('page');
+    expect(route('GET', '/constats/admin/index.html', 'navigate')).toBe('page');
+    // Another page under the scope would overwrite the one kept: the administration is one page, with routes after `#`.
+    expect(route('GET', '/constats/admin/autre/', 'navigate')).toBe('network');
+    expect(cacheName('/constats/admin/')).toBe('adria-mo-admin:/constats/admin/');
     expect(route('GET', '/constats/_astro/AdminApp.Cx1.js')).toBe('asset');
   });
 
@@ -210,7 +215,6 @@ describe('the manifest', () => {
   ) as {
     start_url: string;
     scope: string;
-    icons: { sizes: string; purpose: string }[];
     share_target: { action: string; method: string; enctype: string; params: { files: { name: string }[] } };
   };
 
@@ -225,10 +229,13 @@ describe('the manifest', () => {
     // The manifest lives in admin/, with the service worker: the build for the CDN leaves the whole folder out.
     expect(manifest.start_url).toBe('./');
     expect(manifest.scope).toBe('./');
-    expect(manifest.icons.map((i) => `${i.sizes} ${i.purpose}`)).toEqual([
-      '192x192 any',
-      '512x512 any',
-      '512x512 maskable',
-    ]);
+  });
+
+  it('names icons that exist, beside it', () => {
+    const icons = (manifest as unknown as { icons: { src: string }[] }).icons;
+    expect(icons.length).toBeGreaterThan(0);
+    for (const icon of icons) {
+      expect(existsSync(new URL(icon.src, new URL('../../public/admin/', import.meta.url)))).toBe(true);
+    }
   });
 });

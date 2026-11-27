@@ -107,6 +107,8 @@ test('@stack without network the administration opens, keeps the photos taken an
 }) => {
   test.setTimeout(90_000);
   const errors = watchErrors(page);
+  // A minute of its own (09:35 to 09:59), so a photo left by an earlier run on the same sandbox is in another series.
+  const minute = 20 + (Date.now() % 25);
   await login(page);
   await page.getByRole('link', { name: 'À classer' }).click();
   await waitForServiceWorker(page);
@@ -118,14 +120,14 @@ test('@stack without network the administration opens, keeps the photos taken an
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Administration injoignable' })).toBeVisible();
-  await page.getByLabel('Depuis la galerie').setInputFiles(photoTakenAt(40));
+  await page.getByLabel('Depuis la galerie').setInputFiles(photoTakenAt(minute));
   await expect(page.getByText(/^1 photo attend dans ce téléphone : pas de réseau, ou serveur arrêté/)).toBeVisible();
 
   // Back home: the network comes back, the photo leaves by itself and waits in "À classer".
   await context.setOffline(false);
   await page.evaluate(() => globalThis.dispatchEvent(new Event('online')));
   await expect(page.getByText('Aucune photo en attente dans ce téléphone.')).toBeVisible({ timeout: 15_000 });
-  const series = page.getByRole('region', { name: '23 novembre 2026 à 09:55' });
+  const series = page.getByRole('region', { name: `23 novembre 2026 à 09:${15 + minute}` });
   await expect(series).toBeVisible();
 
   // Left as found: the photo is discarded.

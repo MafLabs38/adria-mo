@@ -19,3 +19,12 @@ export function qrShape(text: string): QrShape {
   );
   return { size, path: squares.join('') };
 }
+
+/** The QR code of a text as the address of an SVG image (a `data:` URL, which the page's CSP allows for images). */
+export function qrImage(text: string): string {
+  const { size, path } = qrShape(text);
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">` +
+    `<rect width="${size}" height="${size}" fill="#fff"/><path d="${path}" fill="#000"/></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}

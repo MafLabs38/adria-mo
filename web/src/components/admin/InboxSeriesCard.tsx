@@ -34,7 +34,9 @@ export default function InboxSeriesCard({
     const when = photo.takenAt ? 'Prise à ' + time.format(new Date(photo.takenAt)) : 'Sans date';
     return `${when}, envoyée par ${photo.author}`;
   };
-  const [chosen, setChosen] = useState<Set<number>>(() => new Set(photos.map((p) => p.id)));
+  // What is left out, rather than what is chosen: a photo arriving in the series is chosen, one that left is forgotten.
+  const [leftOut, setLeftOut] = useState<Set<number>>(() => new Set());
+  const chosen = photos.filter((photo) => !leftOut.has(photo.id)).map((photo) => photo.id);
   const [target, setTarget] = useState('');
   const [values, setValues] = useState<ConstatFieldValues>({ title: '', category: '', location: '', isPublic: true });
   const [comment, setComment] = useState('');
@@ -42,7 +44,7 @@ export default function InboxSeriesCard({
   const [error, setError] = useState<unknown>(null);
 
   const toggle = (id: number) =>
-    setChosen((current) => {
+    setLeftOut((current) => {
       const next = new Set(current);
       if (!next.delete(id)) {
         next.add(id);
@@ -56,15 +58,16 @@ export default function InboxSeriesCard({
     setBusy(true);
     try {
       const destination = target === NEW ? { create: values } : { constat: Number(target) };
-      onAttached(await api.post<AttachResult>('/inbox/attach', { photos: [...chosen], text: comment, ...destination }));
+      onAttached(await api.post<AttachResult>('/inbox/attach', { photos: chosen, text: comment, ...destination }));
     } catch (error_) {
       setError(error_);
+    } finally {
       setBusy(false);
     }
   };
 
   const discard = async () => {
-    const count = chosen.size;
+    const count = chosen.length;
     if (
       !globalThis.confirm(
         count === 1
@@ -82,11 +85,12 @@ export default function InboxSeriesCard({
       onDiscarded();
     } catch (error_) {
       setError(error_);
+    } finally {
       setBusy(false);
     }
   };
 
-  const count = chosen.size;
+  const count = chosen.length;
   return (
     <section aria-labelledby={headingId} className="rounded-2xl bg-white p-4 shadow-sm">
       <h2 id={headingId} className="font-display text-lg font-bold text-brand-800">
@@ -103,12 +107,12 @@ export default function InboxSeriesCard({
                     src={api.photoUrl(photo.thumbnail)}
                     alt={describe(photo)}
                     loading="lazy"
-                    className={`aspect-square w-full rounded-lg object-cover ${chosen.has(photo.id) ? '' : 'opacity-40'}`}
+                    className={`aspect-square w-full rounded-lg object-cover ${leftOut.has(photo.id) ? 'opacity-40' : ''}`}
                   />
                   <input
                     type="checkbox"
                     className="absolute top-1 left-1 h-6 w-6"
-                    checked={chosen.has(photo.id)}
+                    checked={!leftOut.has(photo.id)}
                     onChange={() => toggle(photo.id)}
                     aria-label={`Choisir la photo ${index + 1} sur ${photos.length}`}
                   />

@@ -18,8 +18,10 @@ export const INBOX_HASH = '#/a-classer';
 /** The tag of the background sync that sends the outbox when the network comes back. */
 export const SYNC_TAG = 'outbox';
 
-/** The cache of the administration's page and scripts. */
-export const CACHE_NAME = 'adria-mo-admin';
+/** The cache of the administration's page and scripts, named after its scope (two builds on one site keep their own). */
+export function cacheName(scope: string): string {
+  return `adria-mo-admin:${scope}`;
+}
 
 export type Route = 'share' | 'page' | 'asset' | 'network';
 
@@ -34,7 +36,8 @@ export function routeOf(method: string, url: URL, mode: string, scope: URL, apiP
   if (method !== 'GET' || url.pathname === apiPath || url.pathname.startsWith(`${apiPath}/`)) {
     return 'network';
   }
-  if (mode === 'navigate' && url.pathname.startsWith(scope.pathname)) {
+  // The administration is one page, with routes after `#`: only that page is kept for offline use.
+  if (mode === 'navigate' && (url.pathname === scope.pathname || url.pathname === `${scope.pathname}index.html`)) {
     return 'page';
   }
   return url.pathname.includes('/_astro/') ? 'asset' : 'network';

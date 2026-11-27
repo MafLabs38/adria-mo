@@ -11,6 +11,9 @@ public static class PairingRules
     /// <summary>Random bytes of a pairing code: 256 bits, so a code cannot be guessed while it lives.</summary>
     public const int CodeBytes = 32;
 
+    /// <summary>The longest code accepted: a code is <see cref="CodeBytes"/> in base64url (43 characters), with room.</summary>
+    public const int CodeMaxLength = 64;
+
     /// <summary>The longest name of a phone.</summary>
     public const int NameMaxLength = 60;
 

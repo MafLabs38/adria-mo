@@ -122,7 +122,7 @@ internal static class DeviceEndpoints
         CancellationToken cancellationToken)
     {
         var (users, signIn, db, time, building) = services;
-        if (string.IsNullOrEmpty(request.Code) || request.Code.Length > 64)
+        if (string.IsNullOrEmpty(request.Code) || request.Code.Length > PairingRules.CodeMaxLength)
         {
             return Refused();
         }

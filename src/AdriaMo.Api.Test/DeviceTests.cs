@@ -64,6 +64,7 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
             factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct)));
 
         answers.Count(a => a.StatusCode == HttpStatusCode.OK).Should().Be(1);
+        answers.Where(a => a.StatusCode != HttpStatusCode.OK).Should().OnlyContain(a => a.StatusCode == HttpStatusCode.Unauthorized);
     }
 
     [Fact]
@@ -84,6 +85,30 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
         }
 
         (await factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task An_account_with_a_temporary_password_does_not_pair_a_phone()
+    {
+        var chef = await factory.SuperAdminAsync();
+        (await chef.PostAsJsonAsync("/api/v1/users", new { userName = "provisoire-tel", temporaryPassword = "provisoire du chef" }, Ct)).EnsureSuccessStatusCode();
+        var temporary = await factory.LoggedInAsync("provisoire-tel", "provisoire du chef");
+
+        (await temporary.PostAsJsonAsync("/api/v1/devices", new { name = "Téléphone" }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task A_new_code_purges_the_phones_removed_earlier()
+    {
+        var admin = await factory.AdminAsync("menage");
+        var (_, removed) = await PairAsync(admin);
+        (await admin.DeleteAsync($"/api/v1/devices/{removed}", Ct)).EnsureSuccessStatusCode();
+
+        await CodeAsync(admin);
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Data.AdriaMoDbContext>();
+        db.Devices.Any(d => d.Id == removed).Should().BeFalse();
     }
 
     [Fact]

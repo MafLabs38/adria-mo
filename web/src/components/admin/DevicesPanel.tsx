@@ -50,16 +50,20 @@ export default function DevicesPanel({ api, timeZone }: Readonly<{ api: Api; tim
     if (!pairing) {
       return undefined;
     }
-    const timer = globalThis.setInterval(() => {
-      api.get<DeviceSummary[]>('/devices').then((list) => {
+    const check = async () => {
+      try {
+        const list = await api.get<DeviceSummary[]>('/devices');
         setDevices(list);
         const scanned = list.find((d) => d.id === pairing.id && d.pairedAt !== null);
         if (scanned) {
           setPairing(null);
           setPaired(scanned.name);
         }
-      }, setError);
-    }, POLL_MS);
+      } catch (error_) {
+        setError(error_);
+      }
+    };
+    const timer = globalThis.setInterval(() => void check(), POLL_MS);
     return () => globalThis.clearInterval(timer);
   }, [pairing, api]);
 

@@ -27,7 +27,7 @@ public sealed class InboxPhoto
     /// Whether the photo has a date to sort and group it by: its own, unless after its upload, which only a wrong camera clock
     /// gives (<see cref="Observation"/>).
     /// </summary>
-    public bool IsDated => TakenAt is { } taken && taken <= AddedAt;
+    public bool IsDated => Observation.IsDated(TakenAt, AddedAt);
 
     /// <summary>When the defect was seen: the order in which photos are attached (<see cref="Observation"/>).</summary>
     public DateTimeOffset ObservedAt => Observation.Of(TakenAt, AddedAt);

@@ -123,11 +123,17 @@ internal static class InboxEndpoints
 
         var ids = request.Photos!.Distinct().ToArray();
         var photos = await db.Inbox.Where(p => ids.Contains(p.Id)).ToListAsync(cancellationToken);
+        if (photos.Count == 0)
+        {
+            return TypedResults.NotFound();
+        }
+
         var now = time.GetUtcNow();
+        // A new constat gets its number when saved: its pieces are linked through the navigation (EF sets their ConstatId).
         var constat = request.Create is { } create
             ? db.Constats.Add(ConstatEndpoints.NewConstat(create, now)).Entity
             : await db.Constats.Include(c => c.Pieces).FirstOrDefaultAsync(c => c.Id == request.Constat, cancellationToken);
-        if (photos.Count == 0 || constat is null)
+        if (constat is null)
         {
             return TypedResults.NotFound();
         }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Api, type ApiError } from '../../lib/api';
-import { forget, type OutboxStore } from '../../lib/outbox';
+import { forgetBeforeLogout, type OutboxStore } from '../../lib/outbox';
 import { openOutbox } from '../../lib/outboxStore';
-import { registerServiceWorker } from '../../lib/serviceWorkerClient';
+import { adminScope, registerServiceWorker } from '../../lib/serviceWorkerClient';
 import { isStaleCode, openSession, type Session as AdminSession } from '../../lib/session';
 import ConstatEditor from './ConstatEditor';
 import ConstatList from './ConstatList';
@@ -24,29 +24,21 @@ function pairingText(error: ApiError): string {
     : errorText(error);
 }
 
-/**
- * Photos still waiting in the phone are forgotten at logout, so they never leave under the name of the next account that logs
- * in on this browser; the administrator is warned first.
- */
+/** The photos still waiting in the phone are forgotten at logout (lib/outbox.ts), after a warning. */
 async function forgetWaitingPhotos(): Promise<boolean> {
   let store: OutboxStore;
   try {
-    store = await openOutbox();
+    store = await openOutbox(adminScope(import.meta.env.BASE_URL));
   } catch {
     return true;
   }
-  const waiting = (await store.all()).length;
-  if (waiting > 0) {
-    const photos =
+  return forgetBeforeLogout(store, (waiting) =>
+    globalThis.confirm(
       waiting === 1
-        ? '1 photo attend encore dans ce téléphone : elle sera effacée.'
-        : `${waiting} photos attendent encore dans ce téléphone : elles seront effacées.`;
-    if (!globalThis.confirm(`${photos} Se déconnecter quand même ?`)) {
-      return false;
-    }
-    await forget(store, 'all');
-  }
-  return true;
+        ? '1 photo attend encore dans ce téléphone : elle sera effacée. Se déconnecter quand même ?'
+        : `${waiting} photos attendent encore dans ce téléphone : elles seront effacées. Se déconnecter quand même ?`,
+    ),
+  );
 }
 
 function useHash(): string {

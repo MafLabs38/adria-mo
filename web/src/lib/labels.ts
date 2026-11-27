@@ -39,6 +39,7 @@ const MESSAGES: Record<string, string> = {
   EmptyFile: 'Ce fichier est vide.',
   AlreadyAdded: 'Cette photo est déjà dans le constat.',
   TooMany: 'Trop de photos à la fois (200 au plus).',
+  ServerError: "Le serveur n'a pas pu enregistrer cette photo : réessayez plus tard.",
 };
 
 /** The French message of an error code of the API; the code itself when it is unknown, so nothing is hidden. */

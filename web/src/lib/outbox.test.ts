@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   confirmShared,
   enqueue,
+  FAILURE_SPACING_MS,
   flush,
   forget,
+  forgetBeforeLogout,
   inboxSender,
   isUnreachable,
   MAX_FAILURES,
+  retry,
   serialized,
   type OutboxItem,
   type OutboxStore,
@@ -107,18 +110,50 @@ describe('flush', () => {
   );
 
   it('tries again a photo the back end failed on, sets it aside after a few failures, and goes on with the others', async () => {
-    const store = await filled('broken.jpg', 'b.jpg');
+    const store = await filled('broken.jpg', 'b.jpg', 'c.jpg');
     const send = (item: OutboxItem) => Promise.resolve(answer(item.name === 'broken.jpg' ? 500 : 201));
+    let clock = 0;
+    const later = () => (clock += FAILURE_SPACING_MS);
 
-    expect(await flush(store, send)).toEqual({ sent: 1, refused: 0, stopped: 'server' });
+    expect(await flush(store, send, later)).toEqual({ sent: 2, refused: 0, stopped: 'server' });
     for (let i = 1; i < MAX_FAILURES; i++) {
-      await flush(store, send);
+      await flush(store, send, later);
     }
 
     expect([...store.items.values()].map((i) => [i.name, i.failures, i.refused])).toEqual([
       ['broken.jpg', MAX_FAILURES, 'ServerError'],
     ]);
-    expect(await flush(store, send)).toEqual({ sent: 0, refused: 0, stopped: null });
+    expect(await flush(store, send, later)).toEqual({ sent: 0, refused: 0, stopped: null });
+  });
+
+  it('counts an error once in a while: a short outage tried often sets nothing aside', async () => {
+    const store = await filled('a.jpg');
+    const failing = () => Promise.resolve(answer(500));
+
+    for (let i = 0; i < 10; i++) {
+      await flush(store, failing, () => 1000 + i);
+    }
+
+    expect([...store.items.values()].map((i) => [i.failures, i.refused])).toEqual([[1, undefined]]);
+  });
+
+  it('stops after two errors of the back end in a row: it is failing, not one photo', async () => {
+    const store = await filled('a.jpg', 'b.jpg', 'c.jpg');
+    const send = vi.fn().mockResolvedValue(answer(500));
+
+    expect(await flush(store, send)).toEqual({ sent: 0, refused: 0, stopped: 'server' });
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+
+  it('sends again a photo set aside, from scratch', async () => {
+    const store = await filled('a.jpg');
+    const [item] = await store.all();
+    await store.put({ ...(item as OutboxItem), failures: MAX_FAILURES, failedAt: 5, refused: 'ServerError' });
+
+    await retry(store, (item as OutboxItem).id);
+    await retry(store, 'unknown');
+
+    expect(await flush(store, () => Promise.resolve(answer(201)))).toEqual({ sent: 1, refused: 0, stopped: null });
   });
 
   it.each([401, 403])('stops when the session is gone (%s): the phone must log in again', async (status) => {
@@ -184,6 +219,20 @@ describe('photos shared from the gallery', () => {
     expect(item).toEqual({ id: item?.id, file: item?.file, name: 'shared.jpg', addedAt: 2000 });
   });
 
+  it("are all forgotten at logout, with their owner's agreement when some wait", async () => {
+    const store = await withShared();
+    const refuse = vi.fn(() => false);
+
+    expect(await forgetBeforeLogout(store, refuse)).toBe(false);
+    expect(refuse).toHaveBeenCalledWith(2);
+    expect(store.items.size).toBe(2);
+    expect(await forgetBeforeLogout(store, () => true)).toBe(true);
+    expect(store.items.size).toBe(0);
+    const never = vi.fn(() => false);
+    expect(await forgetBeforeLogout(store, never)).toBe(true);
+    expect(never).not.toHaveBeenCalled();
+  });
+
   it('can be forgotten without the others, and all photos can be forgotten', async () => {
     const store = await withShared();
     await forget(store, 'shared');
@@ -195,8 +244,8 @@ describe('photos shared from the gallery', () => {
 
 describe('isUnreachable', () => {
   it('tells a proxy answering for a stopped back end from an answer of the back end', () => {
-    expect([502, 503, 504, 520, 530, 429].every(isUnreachable)).toBe(true);
-    expect([500, 507, 404, 531, 519].some(isUnreachable)).toBe(false);
+    expect([502, 503, 504, 520, 530].every(isUnreachable)).toBe(true);
+    expect([500, 507, 404, 429, 531, 519].some(isUnreachable)).toBe(false);
   });
 });
 

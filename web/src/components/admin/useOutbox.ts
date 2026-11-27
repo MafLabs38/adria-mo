@@ -5,12 +5,14 @@ import {
   flush,
   forget,
   inboxSender,
+  retry as retryItem,
   serialized,
   type FlushOutcome,
   type OutboxItem,
   type OutboxStore,
 } from '../../lib/outbox';
 import { openOutbox } from '../../lib/outboxStore';
+import { adminScope } from '../../lib/serviceWorkerClient';
 
 export interface Outbox {
   /** The photos waiting in the phone, or `null` while they are read. */
@@ -25,6 +27,8 @@ export interface Outbox {
   confirm: () => Promise<void>;
   /** Forgets the photos shared from the gallery. */
   dismiss: () => Promise<void>;
+  /** Sends again a photo set aside after errors of the back end. */
+  retry: (id: string) => Promise<void>;
   send: () => void;
 }
 
@@ -44,7 +48,7 @@ export function useOutbox(apiBase: string, onSent: () => void): Outbox {
   }, [onSent]);
 
   useEffect(() => {
-    openOutbox().then(
+    openOutbox(adminScope(import.meta.env.BASE_URL)).then(
       async (opened) => {
         setStore(opened);
         setItems(await opened.all());
@@ -136,5 +140,16 @@ export function useOutbox(apiBase: string, onSent: () => void): Outbox {
     }
   }, [store, refresh]);
 
-  return { items, stopped, unavailable, add, remove, confirm, dismiss, send };
+  const retry = useCallback(
+    async (id: string) => {
+      if (store) {
+        await retryItem(store, id);
+        await refresh();
+        send();
+      }
+    },
+    [store, refresh, send],
+  );
+
+  return { items, stopped, unavailable, add, remove, confirm, dismiss, retry, send };
 }

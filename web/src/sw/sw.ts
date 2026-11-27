@@ -7,8 +7,8 @@ import { openOutbox } from '../lib/outboxStore';
 import {
   acceptShare,
   apiPathOf,
-  CACHE_NAME,
   cacheFirst,
+  cacheName,
   INBOX_HASH,
   keepOnly,
   networkFirst,
@@ -46,9 +46,11 @@ const worker = globalThis as unknown as WorkerScope;
 const scope = new URL(worker.registration.scope);
 const apiPath = apiPathOf(worker.location.href);
 const fetcher = (request: Request) => fetch(request);
+const cache = () => caches.open(cacheName(scope.pathname));
+const outbox = () => openOutbox(scope.pathname);
 
 const sendOutbox = serialized(async () => {
-  const outcome = await flush(await openOutbox(), inboxSender(apiPath));
+  const outcome = await flush(await outbox(), inboxSender(apiPath));
   for (const client of await worker.clients.matchAll()) {
     client.postMessage({ type: 'outbox', outcome });
   }
@@ -63,9 +65,16 @@ async function sendOrWait(): Promise<void> {
   }
 }
 
-/** The photos wait in the phone until their owner confirms them on the page: any site can post a form here. */
+/**
+ * The photos wait in the phone until their owner confirms them on the page: any site can post a form here. Whatever happens,
+ * the gallery lands on the inbox, which says when the browser cannot keep photos.
+ */
 async function receiveShare(request: Request): Promise<Response> {
-  await acceptShare(await request.formData(), await openOutbox());
+  try {
+    await acceptShare(await request.formData(), await outbox());
+  } catch {
+    // A malformed form, or a browser that keeps nothing: the page shows it.
+  }
   return Response.redirect(new URL(INBOX_HASH, scope).href, 303);
 }
 
@@ -79,10 +88,10 @@ worker.addEventListener('fetch', (event) => {
       event.respondWith(receiveShare(request));
       break;
     case 'page':
-      event.respondWith(caches.open(CACHE_NAME).then((cache) => networkFirst(request, cache, scope.href, fetcher)));
+      event.respondWith(cache().then((kept) => networkFirst(request, kept, scope.href, fetcher)));
       break;
     case 'asset':
-      event.respondWith(caches.open(CACHE_NAME).then((cache) => cacheFirst(request, cache, fetcher)));
+      event.respondWith(cache().then((kept) => cacheFirst(request, kept, fetcher)));
       break;
     default:
       break;
@@ -108,6 +117,6 @@ worker.addEventListener('message', (event) => {
     event.waitUntil(sendOrWait());
   } else if (message?.type === 'keep' && Array.isArray(message.urls)) {
     const urls = sameOriginAssets(message.urls, scope.origin);
-    event.waitUntil(caches.open(CACHE_NAME).then((cache) => keepOnly(cache, urls, fetcher)));
+    event.waitUntil(cache().then((kept) => keepOnly(kept, urls, fetcher)));
   }
 });
