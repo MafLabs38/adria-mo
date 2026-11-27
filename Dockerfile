@@ -18,7 +18,7 @@ COPY src/AdriaMo.Core ./src/AdriaMo.Core
 RUN dotnet publish src/AdriaMo.Api/AdriaMo.Api.csproj -c Release --no-restore -o /app -p:Version=${VERSION}
 
 # Chiseled image: no shell, no package manager, non-root user by default.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:bcdfe6b8e923ad3d05f01dfa805ab97c99d742823ce030856002a6db38122712
 WORKDIR /app
 COPY --from=build /app ./
 # No data volume yet: nothing is stored. The storage vertical adds it (a folder the application's user can write, which
