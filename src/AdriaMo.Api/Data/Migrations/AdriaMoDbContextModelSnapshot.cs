@@ -86,6 +86,53 @@ namespace AdriaMo.Api.Data.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("AdriaMo.Api.Data.PairedDevice", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CodeExpiresAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CodeHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("CreatedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("PairedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("RevokedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SecurityStamp")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodeHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("Devices");
+                });
+
             modelBuilder.Entity("AdriaMo.Core.Constats.Constat", b =>
                 {
                     b.Property<int>("Id")
@@ -156,6 +203,30 @@ namespace AdriaMo.Api.Data.Migrations
                     b.HasIndex("ConstatId");
 
                     b.ToTable("Pieces");
+                });
+
+            modelBuilder.Entity("AdriaMo.Core.Photos.InboxPhoto", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("AddedAt")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("AuthorId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("TakenAt")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AuthorId");
+
+                    b.ToTable("InboxPhotos", (string)null);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
@@ -286,6 +357,15 @@ namespace AdriaMo.Api.Data.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("AdriaMo.Api.Data.PairedDevice", b =>
+                {
+                    b.HasOne("AdriaMo.Api.Data.AdriaMoUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("AdriaMo.Core.Constats.Piece", b =>
                 {
                     b.HasOne("AdriaMo.Api.Data.AdriaMoUser", null)
@@ -333,6 +413,8 @@ namespace AdriaMo.Api.Data.Migrations
 
                             b1.HasKey("PieceId");
 
+                            b1.HasIndex("OriginalSha256");
+
                             b1.ToTable("Pieces");
 
                             b1.WithOwner()
@@ -340,6 +422,60 @@ namespace AdriaMo.Api.Data.Migrations
                         });
 
                     b.Navigation("Photo");
+                });
+
+            modelBuilder.Entity("AdriaMo.Core.Photos.InboxPhoto", b =>
+                {
+                    b.HasOne("AdriaMo.Api.Data.AdriaMoUser", null)
+                        .WithMany()
+                        .HasForeignKey("AuthorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsOne("AdriaMo.Core.Constats.PiecePhoto", "Photo", b1 =>
+                        {
+                            b1.Property<int>("InboxPhotoId")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<int>("Height")
+                                .HasColumnType("INTEGER");
+
+                            b1.Property<string>("OriginalFileName")
+                                .IsRequired()
+                                .HasMaxLength(80)
+                                .HasColumnType("TEXT");
+
+                            b1.Property<string>("OriginalSha256")
+                                .IsRequired()
+                                .HasMaxLength(64)
+                                .HasColumnType("TEXT");
+
+                            b1.Property<string>("PublishedFileName")
+                                .IsRequired()
+                                .HasMaxLength(80)
+                                .HasColumnType("TEXT");
+
+                            b1.Property<string>("ThumbnailFileName")
+                                .IsRequired()
+                                .HasMaxLength(80)
+                                .HasColumnType("TEXT");
+
+                            b1.Property<int>("Width")
+                                .HasColumnType("INTEGER");
+
+                            b1.HasKey("InboxPhotoId");
+
+                            b1.HasIndex("OriginalSha256")
+                                .IsUnique();
+
+                            b1.ToTable("InboxPhotos");
+
+                            b1.WithOwner()
+                                .HasForeignKey("InboxPhotoId");
+                        });
+
+                    b.Navigation("Photo")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

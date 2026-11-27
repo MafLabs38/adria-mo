@@ -7,6 +7,6 @@ import { apiUrl } from '../../lib/api';
 const apiBase = apiUrl(import.meta.env.PUBLIC_ADRIAMO_API_URL);
 ---
 
-<BaseLayout title="Administration · Adria MO" description="Administration des constats." noindex>
+<BaseLayout title="Administration · Adria MO" description="Administration des constats." noindex app>
   <AdminApp client:only="react" apiBase={apiBase} />
 </BaseLayout>

@@ -54,3 +54,44 @@ export interface PublicationState {
 }
 
 export const SUPER_ADMIN = 'super-admin';
+
+export interface DeviceSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+  pairedAt: string | null;
+  isCurrent: boolean;
+}
+
+export interface PairingCode {
+  id: string;
+  code: string;
+  expiresAt: string;
+}
+
+export interface InboxItem {
+  id: number;
+  photo: string;
+  thumbnail: string;
+  takenAt: string | null;
+  addedAt: string;
+  author: string;
+}
+
+export interface InboxSeries {
+  startedAt: string;
+  endedAt: string;
+  photos: InboxItem[];
+}
+
+export interface InboxListing {
+  series: InboxSeries[];
+  undated: InboxItem[];
+}
+
+export interface AttachResult {
+  constat: number;
+  attached: number;
+  alreadyThere: number;
+  missing: number;
+}

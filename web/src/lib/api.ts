@@ -90,6 +90,10 @@ export class Api {
     return this.request<T>('PUT', path, body);
   }
 
+  delete<T>(path: string): Promise<T> {
+    return this.request<T>('DELETE', path);
+  }
+
   photoUrl(name: string): string {
     return `${this.base}/photos/${encodeURIComponent(name)}`;
   }

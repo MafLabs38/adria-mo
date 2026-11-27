@@ -1,0 +1,64 @@
+import { message } from '../../lib/labels';
+import PhotoPicker from './PhotoPicker';
+import { Panel } from './ui';
+import type { Outbox } from './useOutbox';
+
+function waitingText(count: number, stopped: Outbox['stopped']): string {
+  if (count === 0) {
+    return 'Aucune photo en attente dans ce téléphone.';
+  }
+  const photos = count === 1 ? '1 photo attend' : `${count} photos attendent`;
+  if (stopped === 'session') {
+    return `${photos} dans ce téléphone : reconnectez-vous pour les envoyer.`;
+  }
+  if (stopped === 'unreachable') {
+    return `${photos} dans ce téléphone : pas de réseau pour l'instant, elles partiront toutes seules à son retour.`;
+  }
+  return `${photos} dans ce téléphone : envoi en cours…`;
+}
+
+/** Photos sent to the inbox from the phone (spec §4.1): without network, they wait in the phone and leave by themselves. */
+export default function OutboxPanel({ outbox }: Readonly<{ outbox: Outbox }>) {
+  if (outbox.unavailable) {
+    return (
+      <Panel title="Envoyer des photos">
+        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+          Ce navigateur ne peut pas garder de photos (fenêtre de navigation privée ?) : ouvrez l'administration dans une
+          fenêtre normale.
+        </p>
+      </Panel>
+    );
+  }
+  const items = outbox.items ?? [];
+  const waiting = items.filter((item) => item.refused === undefined);
+  const refused = items.filter((item) => item.refused !== undefined);
+  return (
+    <Panel title="Envoyer des photos">
+      <p className="text-sm text-slate-700">
+        Elles arrivent dans « À classer ». Sans réseau, elles attendent dans le téléphone et partent toutes seules au
+        retour du réseau.
+      </p>
+      <PhotoPicker files={[]} onChange={(files) => void outbox.add(files)} />
+      <output className="block text-sm text-brand-900">
+        {outbox.items === null ? 'Lecture des photos en attente…' : waitingText(waiting.length, outbox.stopped)}
+      </output>
+      {refused.length > 0 ? (
+        <ul className="space-y-1 text-sm" aria-label="Photos refusées">
+          {refused.map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center justify-between gap-2 rounded-lg bg-red-50 px-2 py-1 text-red-900"
+            >
+              <span className="truncate">
+                {item.name} : {message(item.refused ?? '')}
+              </span>
+              <button type="button" className="underline" onClick={() => void outbox.remove(item.id)}>
+                Retirer
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </Panel>
+  );
+}

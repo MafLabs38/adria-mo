@@ -28,7 +28,7 @@ internal static class ConstatEndpoints
         // (AppHeaderMiddleware). The only endpoint that takes a photo is the only one allowed a large body.
         editor.MapPost("/constats/{id:int}/pieces", AddPieceAsync)
             .DisableAntiforgery()
-            .WithMetadata(new RequestSizeLimitAttribute(PhotoIntake.MaxBytes + (1024 * 1024)));
+            .WithMetadata(new RequestSizeLimitAttribute(PhotoUpload.RequestLimit));
         editor.MapGet("/photos/{name}", Photo);
         editor.MapGet("/publication", (PublicationStatus status) => TypedResults.Ok(status.Current));
         return api;
@@ -66,16 +66,7 @@ internal static class ConstatEndpoints
             return problem;
         }
 
-        var now = time.GetUtcNow();
-        var constat = new Constat
-        {
-            Title = request.Title!.Trim(),
-            Category = request.Category!,
-            Location = Blank(request.Location),
-            IsPublic = request.IsPublic,
-            CreatedAt = now,
-            UpdatedAt = now,
-        };
+        var constat = NewConstat(request, time.GetUtcNow());
         db.Constats.Add(constat);
         await db.SaveChangesAsync(cancellationToken);
         publish.Request();
@@ -141,7 +132,7 @@ internal static class ConstatEndpoints
         DateTimeOffset? takenAt = null;
         if (photo is not null)
         {
-            var content = await ReadAsync(photo, cancellationToken);
+            var content = await PhotoUpload.ReadAsync(photo, cancellationToken);
             var sha256 = PhotoIntake.Sha256(content);
             if (constat.Pieces.Any(p => p.Photo?.OriginalSha256 == sha256))
             {
@@ -181,19 +172,7 @@ internal static class ConstatEndpoints
             return Invalid(problem.Field, problem.Code);
         }
 
-        return photo?.Length switch
-        {
-            0 => Invalid("photo", "EmptyFile"),
-            > PhotoIntake.MaxBytes => Invalid("photo", "TooLarge"),
-            _ => null,
-        };
-    }
-
-    private static async Task<byte[]> ReadAsync(IFormFile file, CancellationToken cancellationToken)
-    {
-        using var buffer = new MemoryStream((int)file.Length);
-        await file.CopyToAsync(buffer, cancellationToken);
-        return buffer.ToArray();
+        return photo is not null && PhotoUpload.SizeProblem(photo) is { } size ? Invalid("photo", size) : null;
     }
 
     private static Results<PhysicalFileHttpResult, NotFound> Photo(string name, PhotoIntake intake)
@@ -204,16 +183,33 @@ internal static class ConstatEndpoints
             : TypedResults.NotFound();
     }
 
-    private static ValidationProblem? Validate(ConstatRequest request)
+    /// <summary>A new constat from checked fields (<see cref="Validate"/>).</summary>
+    /// <param name="request">The fields.</param>
+    /// <param name="now">The current instant.</param>
+    /// <returns>The constat, not saved.</returns>
+    internal static Constat NewConstat(ConstatRequest request, DateTimeOffset now) => new()
+    {
+        Title = request.Title!.Trim(),
+        Category = request.Category!,
+        Location = Blank(request.Location),
+        IsPublic = request.IsPublic,
+        CreatedAt = now,
+        UpdatedAt = now,
+    };
+
+    /// <summary>The problems of the fields of a constat, or <c>null</c>.</summary>
+    /// <param name="request">The fields.</param>
+    /// <returns>The problem.</returns>
+    internal static ValidationProblem? Validate(ConstatRequest request)
     {
         var errors = ConstatRules.Check(request.Title, request.Category, request.Location);
         return errors.Count == 0 ? null : TypedResults.ValidationProblem(errors);
     }
 
-    private static ValidationProblem Invalid(string field, string code) =>
+    internal static ValidationProblem Invalid(string field, string code) =>
         TypedResults.ValidationProblem(new Dictionary<string, string[]> { [field] = [code] });
 
-    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    internal static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ConstatDetail Detail(Constat c) => new(
         c.Id,

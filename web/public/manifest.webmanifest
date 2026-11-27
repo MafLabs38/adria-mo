@@ -1,0 +1,24 @@
+{
+  "id": "./admin/",
+  "name": "Adria MO",
+  "short_name": "Adria MO",
+  "description": "Constater les défauts des parties communes et suivre leur réparation.",
+  "lang": "fr",
+  "start_url": "./admin/",
+  "scope": "./admin/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ecfdf7",
+  "theme_color": "#0a7359",
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "share_target": {
+    "action": "./admin/partager/",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "files": [{ "name": "photos", "accept": ["image/*"] }] }
+  }
+}

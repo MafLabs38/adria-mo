@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatDateTime, message, statusLabel } from './labels';
+import { formatDate, formatDateTime, message, seriesTitle, statusLabel } from './labels';
 
 describe('statusLabel', () => {
   it.each([
@@ -38,5 +38,25 @@ describe('dates', () => {
     expect(formatDate(instant, 'Europe/Paris')).toBe('27 novembre 2026');
     expect(formatDate(instant, 'UTC')).toBe('26 novembre 2026');
     expect(formatDateTime(instant, 'Europe/Paris')).toBe('27 novembre 2026 à 00:30');
+  });
+});
+
+describe('seriesTitle', () => {
+  const paris = 'Europe/Paris';
+
+  it('gives the day once and the two times of a series', () => {
+    expect(seriesTitle('2026-11-23T08:15:00Z', '2026-11-23T08:20:00Z', paris)).toBe(
+      '23 novembre 2026, de 09:15 à 09:20',
+    );
+  });
+
+  it('gives one time for photos of the same minute', () => {
+    expect(seriesTitle('2026-11-23T08:15:00Z', '2026-11-23T08:15:30Z', paris)).toBe('23 novembre 2026 à 09:15');
+  });
+
+  it('gives both days for a series across midnight, in the time zone of the building', () => {
+    expect(seriesTitle('2026-11-23T22:58:00Z', '2026-11-23T23:02:00Z', paris)).toBe(
+      'Du 23 novembre 2026 à 23:58 au 24 novembre 2026 à 00:02',
+    );
   });
 });

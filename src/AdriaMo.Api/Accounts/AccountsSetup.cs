@@ -50,7 +50,11 @@ internal static class AccountsSetup
             .AddPasswordValidator<AdriaMoPasswordValidator>();
 
         // A changed or reset password ends every other session at its next request.
-        services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero);
+        services.Configure<SecurityStampValidatorOptions>(o =>
+        {
+            o.ValidationInterval = TimeSpan.Zero;
+            o.OnRefreshingPrincipal = DeviceSessions.KeepDevice;
+        });
 
         services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
         services.AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
@@ -67,6 +71,13 @@ internal static class AccountsSetup
                 // An API answers with a status, never with a redirection to a login page.
                 cookie.Events.OnRedirectToLogin = context => Reject(context.Response, StatusCodes.Status401Unauthorized);
                 cookie.Events.OnRedirectToAccessDenied = context => Reject(context.Response, StatusCodes.Status403Forbidden);
+                // After the security stamp (Identity's own check), a paired phone that was revoked loses its session.
+                var checkStamp = cookie.Events.OnValidatePrincipal;
+                cookie.Events.OnValidatePrincipal = async context =>
+                {
+                    await checkStamp(context);
+                    await DeviceSessions.RejectRevokedAsync(context);
+                };
             });
 
         services.AddAuthorizationBuilder()

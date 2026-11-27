@@ -82,7 +82,10 @@ internal static class UserEndpoints
     private static async Task<Results<NoContent, NotFound, ValidationProblem, ProblemHttpResult>> ResetPasswordAsync(
         string id,
         ResetPasswordRequest request,
-        UserManager<AdriaMoUser> users)
+        UserManager<AdriaMoUser> users,
+        AdriaMoDbContext db,
+        TimeProvider time,
+        CancellationToken cancellationToken)
     {
         var user = await users.FindByIdAsync(id);
         if (user is null)
@@ -107,9 +110,14 @@ internal static class UserEndpoints
         user.AccessFailedCount = 0;
         var token = await users.GeneratePasswordResetTokenAsync(user);
         var reset = await users.ResetPasswordAsync(user, token, request.TemporaryPassword ?? "");
-        return reset.Succeeded
-            ? TypedResults.NoContent()
-            : TypedResults.Problem("The password could not be reset.", statusCode: StatusCodes.Status500InternalServerError);
+        if (!reset.Succeeded)
+        {
+            return TypedResults.Problem("The password could not be reset.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        // A lost phone is the usual reason of a reset: every paired phone of the account is revoked too.
+        await DeviceSessions.RevokeAllAsync(db, user.Id, except: null, time.GetUtcNow(), cancellationToken);
+        return TypedResults.NoContent();
     }
 
     /// <summary>The Identity errors about the user name itself; every other one is about the password.</summary>

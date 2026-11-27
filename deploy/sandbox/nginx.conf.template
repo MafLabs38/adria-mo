@@ -45,6 +45,13 @@ server {
         proxy_read_timeout 120s;
     }
 
+    # The manifest of the installable administration (spec §4.1): its type is not in nginx's list.
+    location ~ \.webmanifest$ {
+        include /etc/nginx/snippets/security-headers.conf;
+        types { }
+        default_type application/manifest+json;
+    }
+
     location / {
         include /etc/nginx/snippets/security-headers.conf;
         try_files $uri $uri/ $uri.html =404;
