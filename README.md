@@ -36,7 +36,7 @@ cd web && yarn install && yarn dev
 
 The site can live under a path of another site (spec §10.5): build it with `ADRIAMO_BASE=/constats/ yarn build`. This is a
 build-time variable of the site, distinct from the `ADRIAMO__*` settings of the back end. `PUBLIC_ADRIAMO_DATA_URL` (where the
-published snapshot is read, default `<base>data/`) and `PUBLIC_ADRIAMO_API_URL` (the administration's API, default `/api/v1`)
+published snapshot is read, default `<base>data/`) and `PUBLIC_ADRIAMO_API_URL` (the administration's API, default `/api/v1`, always on the same origin as the administration's pages)
 are build-time variables too.
 
 The whole thing as in production, with a static server standing for the CDN: [deploy/sandbox](deploy/sandbox/README.md).

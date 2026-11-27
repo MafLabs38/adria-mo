@@ -64,12 +64,16 @@ export default function ConstatEditor({
       (detail) => {
         if (active) {
           setConstat(detail);
-          setValues({
-            title: detail.title,
-            category: detail.category,
-            location: detail.location ?? '',
-            isPublic: detail.isPublic,
-          });
+          // Filled once: a reload after adding a piece keeps what is being typed in "Modifier".
+          setValues(
+            (current) =>
+              current ?? {
+                title: detail.title,
+                category: detail.category,
+                location: detail.location ?? '',
+                isPublic: detail.isPublic,
+              },
+          );
         }
       },
       (error_: unknown) => {
