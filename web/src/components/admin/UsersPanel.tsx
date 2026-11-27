@@ -90,9 +90,9 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
               onChange={(e) => setUserName(e.target.value)}
             />
           </label>
-          <label className="block font-medium">
-            Mot de passe provisoire
-            <span className="flex gap-2">
+          <div className="flex items-end gap-2">
+            <label className="block flex-1 font-medium">
+              Mot de passe provisoire
               <input
                 className={inputClass}
                 required
@@ -101,15 +101,11 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <button
-                type="button"
-                className={`${secondaryButton} mt-1`}
-                onClick={() => setPassword(suggestPassphrase())}
-              >
-                Autre
-              </button>
-            </span>
-          </label>
+            </label>
+            <button type="button" className={secondaryButton} onClick={() => setPassword(suggestPassphrase())}>
+              Autre
+            </button>
+          </div>
           <button type="submit" className={`${primaryButton} w-full`}>
             Créer le compte
           </button>

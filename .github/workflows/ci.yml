@@ -109,15 +109,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [test-backend, test-frontend]
+    env:
+      # An invented account of the throwaway sandbox of this job.
+      E2E_BASE_URL: http://localhost:8490
+      E2E_SUPER_ADMIN: chef
+      E2E_SUPER_ADMIN_PASSWORD: la loge du gardien
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - name: Build the image of the back end and start it
-        run: |
-          docker build -t adria-mo:ci .
-          docker run -d --name adria-mo -p 8080:8080 adria-mo:ci
-          timeout 60 bash -c 'until curl -fs http://localhost:8080/health/live; do sleep 1; done'
+      - name: Build the image of the back end
+        run: docker build -t adria-mo:ci .
       - name: The image runs as a non-root user
         run: |
           user=$(docker inspect --format '{{.Config.User}}' adria-mo:ci)
@@ -134,15 +136,31 @@ jobs:
         working-directory: web
       - run: npx playwright install --with-deps chromium
         working-directory: web
+      # The sandbox of the spec (§10.4): the back end and a static server standing for the CDN.
+      - name: Start the sandbox
+        run: |
+          state="$RUNNER_TEMP/sandbox"
+          mkdir -p "$state/data" "$state/publish"
+          printf '%s\n' "$E2E_SUPER_ADMIN_PASSWORD" > "$state/super-admin-password"
+          chmod 644 "$state/super-admin-password"
+          sudo chown -R 1654:1654 "$state/data" "$state/publish"
+          echo "ADRIAMO_STATE=$state" >> "$GITHUB_ENV"
+          ADRIAMO_STATE="$state" ADRIAMO_IMAGE=adria-mo:ci ADRIAMO_SUPER_ADMIN="$E2E_SUPER_ADMIN" ADRIAMO_PUBLISH_DELAY=00:00:01 \
+            docker compose -f deploy/sandbox/compose.yaml up -d
+          timeout 60 bash -c 'until curl -fs "$E2E_BASE_URL/api/v1/info"; do sleep 1; done'
+      - name: The public page, and the whole flow from a new account to a published constat
+        run: yarn e2e --grep "@smoke|@stack"
+        working-directory: web
       - name: Save the logs of the back end and stop it
         run: |
-          docker logs adria-mo > backend.log 2>&1
-          docker rm -f adria-mo
-      # The promise of the public part (spec §10.1): it works with the back end down. The smoke runs with no back end at all.
-      - run: yarn e2e --grep @smoke
+          docker logs adria-mo-sandbox-backend-1 > backend.log 2>&1
+          docker stop adria-mo-sandbox-backend-1
+      # The promise of the public part (spec §10.1): it works with the back end down.
+      - name: The public page with the back end stopped
+        run: yarn e2e --grep @offline
         working-directory: web
       - if: failure()
-        run: cat backend.log
+        run: cat backend.log || docker logs adria-mo-sandbox-backend-1
       - if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
@@ -193,8 +211,8 @@ jobs:
           /d:sonar.token="${{ secrets.SONAR_TOKEN }}"
           /d:sonar.cs.vscoveragexml.reportsPaths="coverage/**/*.xml"
           /d:sonar.javascript.lcov.reportPaths="coverage/coverage-frontend/lcov.info"
-          /d:sonar.exclusions="web/node_modules/**,web/dist/**,web/.astro/**"
-          /d:sonar.coverage.exclusions="**/obj/**,**/*.g.cs,**/*.test.ts,web/e2e/**,web/*.config.*,web/src/pages/**,web/src/layouts/**,tools/**"
+          /d:sonar.exclusions="web/node_modules/**,web/dist/**,web/.astro/**,src/AdriaMo.Api/Data/Migrations/**"
+          /d:sonar.coverage.exclusions="**/obj/**,**/*.g.cs,**/*.test.ts,web/e2e/**,web/*.config.*,web/src/pages/**,web/src/layouts/**,web/src/components/**,tools/**,deploy/**"
           /d:sonar.cs.roslyn.ignoreIssues=true
           /d:sonar.qualitygate.wait=true
           /d:sonar.issue.ignore.multicriteria=e1

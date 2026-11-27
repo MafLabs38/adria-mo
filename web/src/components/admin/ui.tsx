@@ -14,6 +14,9 @@ export function errorText(error: unknown): string {
     if (error.status === 401) {
       return 'Votre session a pris fin : reconnectez-vous.';
     }
+    if (error.status >= 500) {
+      return "Le serveur d'administration ne répond pas pour l'instant. La page publique reste consultable.";
+    }
     if (error.status === 429) {
       return 'Trop de tentatives : réessayez dans une minute.';
     }
