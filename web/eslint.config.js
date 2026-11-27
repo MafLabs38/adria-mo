@@ -1,11 +1,12 @@
 import js from '@eslint/js';
+import { defineConfig } from 'eslint/config';
 import astro from 'eslint-plugin-astro';
 import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
-export default tseslint.config(
+export default defineConfig(
   {
     ignores: [
       'dist/**',
@@ -18,7 +19,7 @@ export default tseslint.config(
     ],
   },
   js.configs.recommended,
-  ...tseslint.configs.strict,
+  tseslint.configs.strict,
   // The rules of the SonarQube server, in the editor and in `yarn lint`: SonarJS is its engine.
   sonarjs.configs.recommended,
   // Astro components, with the accessibility rules of jsx-a11y.
