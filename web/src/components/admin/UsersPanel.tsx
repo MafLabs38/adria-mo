@@ -4,8 +4,6 @@ import { suggestPassphrase } from '../../lib/passphrase';
 import type { UserSummary } from './types';
 import { ErrorMessage, inputClass, Panel, primaryButton, secondaryButton } from './ui';
 
-const when = new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' });
-
 /** The temporary password to hand over, shown once to the super-admin. */
 function Handover({ userName, password }: Readonly<{ userName: string; password: string }>) {
   return (
@@ -17,7 +15,8 @@ function Handover({ userName, password }: Readonly<{ userName: string; password:
   );
 }
 
-export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
+export default function UsersPanel({ api, timeZone }: Readonly<{ api: Api; timeZone: string }>) {
+  const when = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short', timeZone });
   const [users, setUsers] = useState<UserSummary[]>([]);
   const [userName, setUserName] = useState('');
   const [password, setPassword] = useState(() => suggestPassphrase());

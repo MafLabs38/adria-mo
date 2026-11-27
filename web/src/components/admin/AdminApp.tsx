@@ -58,7 +58,7 @@ function Page({ api, me, hash, onMe, failures, onCreated }: Readonly<PageProps>)
     return <PasswordForm api={api} forced={false} onChanged={onMe} />;
   }
   if (hash === '#/comptes' && me.roles.includes(SUPER_ADMIN)) {
-    return <UsersPanel api={api} />;
+    return <UsersPanel api={api} timeZone={me.timeZone} />;
   }
   if (hash === '#/constats/nouveau') {
     return <NewConstat api={api} onCreated={onCreated} />;

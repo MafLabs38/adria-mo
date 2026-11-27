@@ -84,7 +84,8 @@ internal sealed class PhotoIntake : IDisposable
     public async Task<IntakeResult> AcceptAsync(byte[] content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
-        using var codec = SKCodec.Create(SKData.CreateCopy(content));
+        using var data = SKData.CreateCopy(content);
+        using var codec = SKCodec.Create(data);
         if (codec is null)
         {
             return IntakeResult.Refused("NotAnImage");
@@ -165,8 +166,9 @@ internal sealed class PhotoIntake : IDisposable
                     exif.GetString(ExifDirectoryBase.TagTimeZoneOriginal),
                     _buildingTimeZone);
         }
-        catch (ImageProcessingException)
+        catch (Exception exception) when (exception is ImageProcessingException or IOException or ArgumentException or IndexOutOfRangeException)
         {
+            // The date is optional: an unreadable EXIF block never refuses the photo, which is then dated by its upload.
             return null;
         }
     }

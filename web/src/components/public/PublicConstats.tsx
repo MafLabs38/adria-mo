@@ -89,7 +89,7 @@ export default function PublicConstats({ data, detail }: Readonly<Props>) {
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
-            className="mt-1 block w-full rounded-lg border-slate-300 bg-white p-2"
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2"
           >
             <option value="">Toutes</option>
             {categories.map(([key, label]) => (
@@ -104,7 +104,7 @@ export default function PublicConstats({ data, detail }: Readonly<Props>) {
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}
-            className="mt-1 block w-full rounded-lg border-slate-300 bg-white p-2"
+            className="mt-1 block w-full rounded-lg border border-slate-300 bg-white p-2"
           >
             <option value="">Tous</option>
             {statuses.map((s) => (

@@ -29,7 +29,7 @@ export default function NewConstat({
       );
       onCreated(
         created.number,
-        outcomes.filter((o) => o.error !== null).map((o) => o.file),
+        outcomes.filter((o) => o.error !== null).map((o) => o.file || 'commentaire'),
       );
     } catch (error_) {
       setError(error_);

@@ -39,7 +39,7 @@ internal static class UserEndpoints
         return TypedResults.Ok(summaries.ToArray());
     }
 
-    private static async Task<Results<Created<UserSummary>, ValidationProblem, Conflict, ProblemHttpResult>> CreateAsync(
+    private static async Task<Results<Created<UserSummary>, ValidationProblem, Conflict<string>, ProblemHttpResult>> CreateAsync(
         CreateUserRequest request,
         UserManager<AdriaMoUser> users,
         TimeProvider time)
@@ -52,14 +52,14 @@ internal static class UserEndpoints
 
         if (await users.FindByNameAsync(userName) is not null)
         {
-            return TypedResults.Conflict();
+            return TypedResults.Conflict(nameof(IdentityErrorDescriber.DuplicateUserName));
         }
 
         var user = new AdriaMoUser { UserName = userName, MustChangePassword = true, CreatedAt = time.GetUtcNow() };
         var created = await users.CreateAsync(user, request.TemporaryPassword ?? "");
         if (created.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.DuplicateUserName)))
         {
-            return TypedResults.Conflict();
+            return TypedResults.Conflict(nameof(IdentityErrorDescriber.DuplicateUserName));
         }
 
         if (!created.Succeeded)
@@ -70,8 +70,10 @@ internal static class UserEndpoints
         if (!(await users.AddToRoleAsync(user, Roles.Admin)).Succeeded)
         {
             // An account without a role must not stay: it could not do anything, and its user name would be taken.
-            await users.DeleteAsync(user);
-            return TypedResults.Problem("The account could not be given its role.", statusCode: StatusCodes.Status500InternalServerError);
+            var deleted = await users.DeleteAsync(user);
+            return TypedResults.Problem(
+                deleted.Succeeded ? "The account could not be given its role." : "The account could not be given its role, nor removed.",
+                statusCode: StatusCodes.Status500InternalServerError);
         }
 
         return TypedResults.Created((string?)null, new UserSummary(user.Id, userName, [Roles.Admin], true, null));
@@ -110,11 +112,11 @@ internal static class UserEndpoints
             : TypedResults.Problem("The password could not be reset.", statusCode: StatusCodes.Status500InternalServerError);
     }
 
+    /// <summary>Each Identity error under its field: the user name ones under <c>userName</c>, the others under <c>temporaryPassword</c>.</summary>
     private static ValidationProblem Invalid(IdentityResult result) =>
-        TypedResults.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["temporaryPassword"] = [.. result.Errors.Select(e => e.Code)],
-        });
+        TypedResults.ValidationProblem(result.Errors
+            .GroupBy(e => e.Code.Contains("UserName", StringComparison.Ordinal) ? "userName" : "temporaryPassword")
+            .ToDictionary(g => g.Key, g => g.Select(e => e.Code).ToArray()));
 }
 
 /// <summary>A new administrator.</summary>
