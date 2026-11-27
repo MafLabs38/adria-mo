@@ -6,3 +6,10 @@
 /CLAUDE.md                     @Maf38
 /docs/spec.md                  @Maf38
 /docs/review-decisions/README.md @Maf38
+# The settings of the quality gates: a pull request must not lower them unseen.
+/.editorconfig                 @Maf38
+/Directory.Build.props         @Maf38
+/web/eslint.config.js          @Maf38
+/web/vitest.config.ts          @Maf38
+/web/stryker.config.json       @Maf38
+/src/AdriaMo.Core.Test/stryker-config.json @Maf38
