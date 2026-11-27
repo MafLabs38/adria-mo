@@ -60,9 +60,11 @@ export default function InboxPage({ api, timeZone }: Readonly<{ api: Api; timeZo
       {listing && groups.length === 0 ? <p>Rien à classer : toutes les photos sont rangées.</p> : null}
       {groups.map((group) => (
         <InboxSeriesCard
-          key={group.photos.map((p) => p.id).join('-')}
+          // The first photo names the series: a photo arriving later keeps what was typed in the card.
+          key={group.photos[0]?.id ?? group.title}
           api={api}
           title={group.title}
+          timeZone={timeZone}
           photos={group.photos}
           constats={constats}
           categories={categories}

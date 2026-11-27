@@ -24,9 +24,9 @@ const root = base.replace(/\/$/, '');
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href={`${root}/favicon.svg`} />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
-    {app && <link rel="manifest" href={`${root}/manifest.webmanifest`} />}
+    {app && <link rel="manifest" href={`${root}/admin/manifest.webmanifest`} />}
     {app && <meta name="theme-color" content="#0a7359" />}
-    {app && <link rel="apple-touch-icon" href={`${root}/icons/icon-192.png`} />}
+    {app && <link rel="apple-touch-icon" href={`${root}/admin/icons/icon-192.png`} />}
     <title>{title}</title>
   </head>
   <body class="min-h-dvh bg-brand-50 text-slate-900">

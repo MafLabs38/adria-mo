@@ -1,5 +1,6 @@
 import { message } from '../../lib/labels';
 import PhotoPicker from './PhotoPicker';
+import SharedPhotos from './SharedPhotos';
 import { Panel } from './ui';
 import type { Outbox } from './useOutbox';
 
@@ -12,7 +13,10 @@ function waitingText(count: number, stopped: Outbox['stopped']): string {
     return `${photos} dans ce téléphone : reconnectez-vous pour les envoyer.`;
   }
   if (stopped === 'unreachable') {
-    return `${photos} dans ce téléphone : pas de réseau pour l'instant, elles partiront toutes seules à son retour.`;
+    return `${photos} dans ce téléphone : pas de réseau, ou serveur arrêté pour l'instant ; elles partiront toutes seules.`;
+  }
+  if (stopped === 'server') {
+    return `${photos} dans ce téléphone : le serveur n'a pas pu les enregistrer, nouvel essai plus tard.`;
   }
   return `${photos} dans ce téléphone : envoi en cours…`;
 }
@@ -30,7 +34,8 @@ export default function OutboxPanel({ outbox }: Readonly<{ outbox: Outbox }>) {
     );
   }
   const items = outbox.items ?? [];
-  const waiting = items.filter((item) => item.refused === undefined);
+  const shared = items.filter((item) => item.shared && item.refused === undefined);
+  const waiting = items.filter((item) => !item.shared && item.refused === undefined);
   const refused = items.filter((item) => item.refused !== undefined);
   return (
     <Panel title="Envoyer des photos">
@@ -38,6 +43,9 @@ export default function OutboxPanel({ outbox }: Readonly<{ outbox: Outbox }>) {
         Elles arrivent dans « À classer ». Sans réseau, elles attendent dans le téléphone et partent toutes seules au
         retour du réseau.
       </p>
+      {shared.length > 0 ? (
+        <SharedPhotos items={shared} onConfirm={() => void outbox.confirm()} onDismiss={() => void outbox.dismiss()} />
+      ) : null}
       <PhotoPicker files={[]} onChange={(files) => void outbox.add(files)} />
       <output className="block text-sm text-brand-900">
         {outbox.items === null ? 'Lecture des photos en attente…' : waitingText(waiting.length, outbox.stopped)}

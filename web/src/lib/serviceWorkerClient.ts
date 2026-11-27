@@ -11,9 +11,9 @@ export function adminScope(base: string): string {
   return `${root}admin/`;
 }
 
-/** The scripts and styles of the page, which the service worker keeps so the page opens without network. */
-export function loadedAssets(entries: readonly { name: string }[], origin: string): string[] {
-  return entries.map((entry) => entry.name).filter((url) => url.startsWith(`${origin}/`) && url.includes('/_astro/'));
+/** The API must be a path of this site: the service worker sends the photos there with the session cookie. */
+export function isSameOriginPath(apiBase: string): boolean {
+  return apiBase.startsWith('/') && !apiBase.startsWith('//');
 }
 
 /** Registers the service worker, then gives it the scripts to keep. Without service workers (an old browser), nothing. */
@@ -22,10 +22,15 @@ export async function registerServiceWorker(base: string, apiBase: string): Prom
   if (!container) {
     return;
   }
+  if (!isSameOriginPath(apiBase)) {
+    // Spec §10.3: the administration and its API share one address. Elsewhere, the page sends the photos itself.
+    console.warn('Adria MO: the API is not on this site, the service worker is not registered.');
+    return;
+  }
   await container.register(serviceWorkerUrl(base, apiBase), { scope: adminScope(base) });
   const registration = await container.ready;
   registration.active?.postMessage({
     type: 'keep',
-    urls: loadedAssets(performance.getEntriesByType('resource'), globalThis.location.origin),
+    urls: performance.getEntriesByType('resource').map((entry) => entry.name),
   });
 }

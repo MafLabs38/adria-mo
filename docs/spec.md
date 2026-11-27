@@ -135,11 +135,16 @@ hors ligne, et retrouve sa wifi chez lui. Le but : qu'il n'ait ni mot de passe �
   n'importe quel navigateur ; l'installation est facultative et ne fait qu'ajouter l'icône, le
   partage depuis la galerie et l'envoi au retour de la wifi.
 - **Partager depuis la galerie** : il sélectionne ses photos dans la galerie → *Partager* →
-  **Adria MO**. Elles partent dans une **boîte « À classer »**. (Fonction de Chrome sur Android, la
+  **Adria MO**. L'application s'ouvre et les montre : un geste « Envoyer » les fait partir dans une
+  **boîte « À classer »** (une page d'un autre site peut, elle aussi, envoyer des photos au même
+  endroit : rien ne part sans que leur propriétaire les ait vues ; 50 photos par partage au plus). (Fonction de Chrome sur Android, la
   cible. Sur iPhone, rien de spécifique : le bouton « Ajouter des photos » ouvre la galerie.)
 - **Envoi automatique dès la wifi** : si la photo est prise depuis l'application sans réseau, elle
-  attend dans le téléphone et part toute seule au retour de la wifi. Sans réseau, l'administration
-  s'ouvre quand même (gardée dans le téléphone), le temps de prendre ou de choisir des photos. Le
+  attend dans le téléphone et part toute seule au retour de la wifi. Sans réseau, ou quand le serveur
+  de l'immeuble est arrêté, l'administration s'ouvre quand même (gardée dans le téléphone), le temps
+  de prendre ou de choisir des photos. Une photo sur laquelle le serveur échoue est réessayée, puis
+  mise de côté après trois échecs : elle ne bloque pas les suivantes. Se déconnecter efface les photos
+  qui attendent encore (après avertissement), pour qu'elles ne partent jamais sous le nom d'un autre. Le
   navigateur ne distingue pas la wifi des données mobiles : la photo part dès que le réseau revient,
   ce qui revient au même pour un téléphone sans forfait de données.
 - **Classer ensuite, au calme** (sur le téléphone ou l'ordinateur) : la boîte « À classer » trie les
@@ -331,7 +336,10 @@ un premier testeur tel quel.
 ### 10.6 Production, plus tard
 
 Front sur Cloudflare Pages, données publiques sur R2, back-end sur ton cluster ou une VM derrière le
-tunnel, sauvegarde du volume (base + photos originales) vers le serveur de sauvegarde de la maison.
+tunnel, sauvegarde du volume (base + photos originales) vers le serveur de sauvegarde de la maison,
+**sauf le dossier `keys/`** : les clés qui signent les sessions n'en sortent pas (une sauvegarde lue
+par un tiers ne permet pas de fabriquer une session ; une restauration déconnecte tout le monde, y
+compris les téléphones appairés).
 
 ## 11. Dépôt public, qualité et contribution
 

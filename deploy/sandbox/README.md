@@ -22,3 +22,11 @@ cd web && yarn build && cd ..
 docker compose -f deploy/sandbox/compose.yaml up -d
 docker compose -f deploy/sandbox/compose.yaml stop backend   # the public page stays online
 ```
+
+## Trying it from a phone
+
+The camera, the share target, "Ajouter à l'écran d'accueil" and the sending of photos later need a secure context: HTTPS with
+a certificate the phone trusts (`http://localhost` counts as secure, so the e2e tests run on it). Put the sandbox behind your
+HTTPS proxy, open its `admin/` page on the phone, or scan the pairing QR code shown on a computer: the code carries the address
+the computer used, so open the administration on the computer through the same HTTPS address. `yarn dev` serves the service
+worker too (`admin/sw.js`), but on `http://localhost` of the computer only.

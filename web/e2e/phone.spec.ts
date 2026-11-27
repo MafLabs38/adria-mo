@@ -1,4 +1,4 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import { devices, expect, test, type Browser, type Page } from '@playwright/test';
 import { expectImagesLoaded, photoTakenAt, waitForServiceWorker, watchErrors } from './helpers';
 
 // The phone of an administrator (spec §4.1), on a sandbox: paired by QR code without typing a password, photos shared from the
@@ -31,11 +31,11 @@ async function shareFromGallery(page: Page, files: ReturnType<typeof photoTakenA
     document.body.append(form);
   });
   await page.setInputFiles('#shared', files);
-  await page.evaluate(() => document.querySelector('form[action="./partager/"]')?.requestSubmit());
+  await page.evaluate(() => document.querySelector<HTMLFormElement>('form[action="./partager/"]')?.requestSubmit());
 }
 
 async function newPhone(browser: Browser, baseURL: string | undefined) {
-  const context = await browser.newContext({ ...test.info().project.use, baseURL });
+  const context = await browser.newContext({ ...devices['Pixel 7'], ...(baseURL ? { baseURL } : {}) });
   return { context, page: await context.newPage() };
 }
 
@@ -61,16 +61,20 @@ test('@stack a phone paired by QR code shares photos that are classified in seri
   const phoneErrors = watchErrors(phone.page);
   await phone.page.goto(`./admin/#/appairer/${code}`);
   await expect(phone.page.getByRole('heading', { name: 'À classer' })).toBeVisible();
-  expect(phone.page.url()).not.toContain(code);
+  await expect(phone.page).not.toHaveURL(new RegExp(code));
   await expect(page.getByText(`« ${phoneName} » est appairé`)).toBeVisible({ timeout: 10_000 });
 
   // Two photos taken two minutes apart, shared from the gallery: one series.
   await waitForServiceWorker(phone.page);
   await shareFromGallery(phone.page, [photoTakenAt(2), photoTakenAt(4)]);
   await expect(phone.page).toHaveURL(/\/admin\/#\/a-classer$/);
+  // Nothing leaves before its owner has seen the photos: a page of another site can post to the share target too.
+  await expect(phone.page.getByText('2 photos partagées depuis la galerie')).toBeVisible();
+  await expectImagesLoaded(phone.page, 'img[alt^="IMG_09"]');
+  await phone.page.getByRole('button', { name: 'Envoyer ces 2 photos' }).click();
   const series = phone.page.getByRole('region', { name: '23 novembre 2026, de 09:17 à 09:19' });
   await expect(series).toBeVisible({ timeout: 20_000 });
-  await expectImagesLoaded(phone.page, 'img[alt^="Envoyée par"]');
+  await expectImagesLoaded(phone.page, 'img[alt^="Prise à"]');
   await expect(phone.page.getByText('Aucune photo en attente dans ce téléphone.')).toBeVisible();
 
   // The series becomes a constat, dated by its first photo.
@@ -113,9 +117,9 @@ test('@stack without network the administration opens, keeps the photos taken an
   // On a landing without wifi: the administration opens from the phone, the photo taken waits in it.
   await context.setOffline(true);
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Pas de réseau' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Administration injoignable' })).toBeVisible();
   await page.getByLabel('Depuis la galerie').setInputFiles(photoTakenAt(40));
-  await expect(page.getByText(/^1 photo attend dans ce téléphone : pas de réseau/)).toBeVisible();
+  await expect(page.getByText(/^1 photo attend dans ce téléphone : pas de réseau, ou serveur arrêté/)).toBeVisible();
 
   // Back home: the network comes back, the photo leaves by itself and waits in "À classer".
   await context.setOffline(false);

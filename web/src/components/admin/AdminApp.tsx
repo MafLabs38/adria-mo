@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Api, ApiError } from '../../lib/api';
-import { pairingCodeOf } from '../../lib/pairing';
+import { Api, type ApiError } from '../../lib/api';
+import { forget, type OutboxStore } from '../../lib/outbox';
+import { openOutbox } from '../../lib/outboxStore';
 import { registerServiceWorker } from '../../lib/serviceWorkerClient';
+import { isStaleCode, openSession, type Session as AdminSession } from '../../lib/session';
 import ConstatEditor from './ConstatEditor';
 import ConstatList from './ConstatList';
 import DevicesPanel from './DevicesPanel';
@@ -14,40 +16,37 @@ import { SUPER_ADMIN, type Me } from './types';
 import UsersPanel from './UsersPanel';
 import { ErrorMessage, errorText, secondaryButton } from './ui';
 
-type Session =
-  | { kind: 'loading' }
-  | { kind: 'anonymous'; pairingError?: unknown }
-  | { kind: 'offline' }
-  | { kind: 'error'; error: unknown }
-  | { kind: 'in'; me: Me };
+type Session = AdminSession<Me>;
 
-/** The session at the opening: a phone that scanned a pairing code logs in with it, any other page asks who is logged in. */
-async function openSession(api: Api): Promise<Session> {
-  const code = pairingCodeOf(globalThis.location.hash);
-  if (code) {
-    // Out of the address and of the history at once (the entry is replaced, and the page follows the new hash).
-    globalThis.location.replace('#/a-classer');
-    try {
-      return { kind: 'in', me: await api.post<Me>('/auth/pair', { code }) };
-    } catch (error) {
-      return error instanceof ApiError ? { kind: 'anonymous', pairingError: error } : { kind: 'offline' };
-    }
-  }
-  try {
-    return { kind: 'in', me: await api.get<Me>('/auth/me') };
-  } catch (error) {
-    if (error instanceof ApiError) {
-      return error.status === 401 ? { kind: 'anonymous' } : { kind: 'error', error };
-    }
-    // No answer at all: no network, the phone keeps the photos for later.
-    return { kind: 'offline' };
-  }
-}
-
-function pairingText(error: unknown): string {
-  return error instanceof ApiError && error.status === 401
+function pairingText(error: ApiError): string {
+  return isStaleCode(error)
     ? "Ce code d'appairage n'est plus valable : affichez-en un nouveau sur l'ordinateur, ou connectez-vous."
     : errorText(error);
+}
+
+/**
+ * Photos still waiting in the phone are forgotten at logout, so they never leave under the name of the next account that logs
+ * in on this browser; the administrator is warned first.
+ */
+async function forgetWaitingPhotos(): Promise<boolean> {
+  let store: OutboxStore;
+  try {
+    store = await openOutbox();
+  } catch {
+    return true;
+  }
+  const waiting = (await store.all()).length;
+  if (waiting > 0) {
+    const photos =
+      waiting === 1
+        ? '1 photo attend encore dans ce téléphone : elle sera effacée.'
+        : `${waiting} photos attendent encore dans ce téléphone : elles seront effacées.`;
+    if (!globalThis.confirm(`${photos} Se déconnecter quand même ?`)) {
+      return false;
+    }
+    await forget(store, 'all');
+  }
+  return true;
 }
 
 function useHash(): string {
@@ -133,7 +132,9 @@ export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {
   };
 
   const open = useCallback(() => {
-    openSession(api).then(setSession, (error: unknown) => setSession({ kind: 'error', error }));
+    openSession<Me>(api, globalThis.location).then(setSession, (error: unknown) =>
+      setSession({ kind: 'error', error }),
+    );
   }, [api]);
   useEffect(open, [open]);
 
@@ -143,6 +144,9 @@ export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {
   }, [apiBase]);
 
   const logout = async () => {
+    if (!(await forgetWaitingPhotos())) {
+      return;
+    }
     await api.post('/auth/logout').catch(() => undefined);
     setSession({ kind: 'anonymous' });
   };

@@ -82,7 +82,7 @@ internal static class AccountEndpoints
     private static async Task<Results<Ok<Me>, ValidationProblem, UnauthorizedHttpResult>> ChangePasswordAsync(
         ChangePasswordRequest request,
         HttpContext http,
-        [AsParameters] PasswordServices services,
+        [AsParameters] AccountServices services,
         CancellationToken cancellationToken)
     {
         var (users, signIn, db, time, building) = services;
@@ -133,13 +133,13 @@ internal static class AccountEndpoints
     }
 }
 
-/// <summary>What changing one's password needs.</summary>
+/// <summary>What changing one's password and pairing a phone need.</summary>
 /// <param name="Users">The accounts.</param>
 /// <param name="SignIn">The sign-in manager.</param>
 /// <param name="Db">The database, for the paired phones.</param>
 /// <param name="Time">The clock.</param>
 /// <param name="Building">The building settings.</param>
-internal sealed record PasswordServices(
+internal sealed record AccountServices(
     UserManager<AdriaMoUser> Users,
     SignInManager<AdriaMoUser> SignIn,
     AdriaMoDbContext Db,

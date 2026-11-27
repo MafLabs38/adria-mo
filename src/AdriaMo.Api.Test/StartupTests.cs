@@ -23,6 +23,20 @@ public sealed class StartupTests
     }
 
     [Fact]
+    public async Task Pairing_attempts_are_limited_like_the_login()
+    {
+        await using var factory = new SettingsFactory(new() { ["Auth:LoginAttemptsPerMinute"] = "2" });
+        var client = factory.Client();
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 3; i++)
+        {
+            statuses.Add((await client.PostAsJsonAsync("/api/v1/auth/pair", new { code = "pas-un-code" }, Ct)).StatusCode);
+        }
+
+        statuses.Should().Equal(HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.TooManyRequests);
+    }
+
+    [Fact]
     public async Task Behind_the_proxy_each_client_address_has_its_own_login_limit()
     {
         await using var factory = new SettingsFactory(new() { ["Auth:LoginAttemptsPerMinute"] = "2", ["Network:BehindProxy"] = "true" });

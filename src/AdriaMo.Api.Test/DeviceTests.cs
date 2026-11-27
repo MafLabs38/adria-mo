@@ -33,17 +33,65 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
     }
 
     [Fact]
-    public async Task The_session_of_a_phone_lasts_ninety_days_in_a_secure_cookie()
+    public async Task The_session_of_a_phone_lasts_ninety_days_without_use_in_a_secure_cookie()
     {
-        var admin = await factory.AdminAsync("longtemps");
-        var code = await CodeAsync(admin);
+        await using var clocked = new ClockFactory();
+        var code = await CodeAsync(await clocked.AdminAsync("longtemps"));
+        var phone = clocked.Client();
 
-        var paired = await factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct);
+        var paired = await phone.PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct);
 
         var cookie = paired.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("__Host-adriamo=", StringComparison.Ordinal));
         cookie.Should().Contain("secure").And.Contain("httponly").And.Contain("samesite=strict");
         var expires = DateTimeOffset.Parse(cookie.Split("expires=")[1].Split(';')[0], System.Globalization.CultureInfo.InvariantCulture);
-        expires.Should().BeAfter(DateTimeOffset.UtcNow.AddDays(89));
+        expires.Should().Be(clocked.Clock.GetUtcNow().AddDays(90));
+        // Used every two months, it stays logged in: the 90 days start again at each use.
+        clocked.Clock.Advance(TimeSpan.FromDays(60));
+        (await phone.GetAsync("/api/v1/auth/me", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        clocked.Clock.Advance(TimeSpan.FromDays(60));
+        (await phone.GetAsync("/api/v1/auth/me", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+        // Unused for more than 90 days, it is logged out.
+        clocked.Clock.Advance(TimeSpan.FromDays(91));
+        (await phone.GetAsync("/api/v1/auth/me", Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_code_opens_one_session_even_scanned_twice_at_the_same_instant()
+    {
+        var code = await CodeAsync(await factory.AdminAsync("simultane"));
+
+        var answers = await Task.WhenAll(Enumerable.Range(0, 4).Select(_ =>
+            factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct)));
+
+        answers.Count(a => a.StatusCode == HttpStatusCode.OK).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_code_shown_before_a_password_change_or_on_a_locked_account_is_refused()
+    {
+        var admin = await factory.AdminAsync("change-avant", "la porte du hall b");
+        var stale = await CodeAsync(admin);
+        (await admin.PostAsJsonAsync("/api/v1/auth/password", new { currentPassword = "la porte du hall b", newPassword = "le local à vélos est plein" }, Ct))
+            .EnsureSuccessStatusCode();
+
+        (await factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = stale.Code }, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+
+        var locked = await factory.AdminAsync("bloque");
+        var code = await CodeAsync(locked);
+        for (var i = 0; i < 5; i++)
+        {
+            await factory.Client().PostAsJsonAsync("/api/v1/auth/login", new { userName = "bloque", password = "pas le bon mot de passe" }, Ct);
+        }
+
+        (await factory.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task A_phone_does_not_pair_another_device()
+    {
+        var (phone, _) = await PairAsync(await factory.AdminAsync("pas-de-relais"));
+
+        (await phone.PostAsJsonAsync("/api/v1/devices", new { name = "Second" }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
     [Fact]
@@ -158,6 +206,8 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
         var admin = await clocked.AdminAsync("lent");
         var code = await CodeAsync(admin);
         code.ExpiresAt.Should().Be(clocked.Clock.GetUtcNow().AddMinutes(10));
+        clocked.Clock.Advance(TimeSpan.FromMinutes(10) - TimeSpan.FromSeconds(1));
+        (await admin.GetFromJsonAsync<DeviceSummary[]>("/api/v1/devices", Ct)).Should().ContainSingle("the code is still listed until it expires");
 
         clocked.Clock.Advance(TimeSpan.FromMinutes(10));
 
@@ -169,21 +219,32 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
     public async Task A_paired_phone_stays_logged_in_when_the_back_end_restarts()
     {
         var root = Path.Join(Path.GetTempPath(), "adria-mo-restart-" + Guid.NewGuid().ToString("N"));
-        string session;
-        await using (var before = new FolderFactory(root, keepFolders: true))
+        try
         {
-            var code = await CodeAsync(await before.AdminAsync("redemarre"));
-            var paired = await before.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct);
-            session = paired.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("__Host-adriamo=", StringComparison.Ordinal)).Split(';')[0];
-            // In the data folder (the volume), not in the home folder of the account, which a container does not keep.
-            Directory.GetFiles(Path.Join(before.DataFolder, "keys"), "key-*.xml").Should().NotBeEmpty();
+            string session;
+            await using (var before = new FolderFactory(root))
+            {
+                var code = await CodeAsync(await before.AdminAsync("redemarre"));
+                var paired = await before.Client().PostAsJsonAsync("/api/v1/auth/pair", new { code = code.Code }, Ct);
+                session = paired.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("__Host-adriamo=", StringComparison.Ordinal)).Split(';')[0];
+                // In the data folder (the volume), not in the home folder of the account, which a container does not keep.
+                Directory.GetFiles(Path.Join(before.DataFolder, "keys"), "key-*.xml").Should().NotBeEmpty();
+            }
+
+            await using var after = new FolderFactory(root);
+            using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/me");
+            request.Headers.Add("Cookie", session);
+
+            (await after.Client().SendAsync(request, Ct)).StatusCode.Should().Be(HttpStatusCode.OK, "the keys of the cookies are in the data folder");
         }
-
-        await using var after = new FolderFactory(root, keepFolders: false);
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/me");
-        request.Headers.Add("Cookie", session);
-
-        (await after.Client().SendAsync(request, Ct)).StatusCode.Should().Be(HttpStatusCode.OK, "the keys of the cookies are in the data folder");
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     private async Task<(HttpClient Phone, string Id)> PairAsync(HttpClient admin)
@@ -201,7 +262,8 @@ public sealed class DeviceTests(AdriaMoFactory factory) : IClassFixture<AdriaMoF
         return (await response.Content.ReadFromJsonAsync<PairingCode>(Ct))!;
     }
 
-    private sealed class FolderFactory(string root, bool keepFolders) : AdriaMoFactory(root, keepFolders);
+    /// <summary>A back end on folders that outlive it, deleted by the test.</summary>
+    private sealed class FolderFactory(string root) : AdriaMoFactory(root, keepFolders: true);
 
     private sealed class ClockFactory : AdriaMoFactory
     {

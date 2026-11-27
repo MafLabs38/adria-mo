@@ -5,11 +5,12 @@ import { Panel, secondaryButton } from './ui';
 import { useOutbox } from './useOutbox';
 
 /**
- * The administration opened without network (spec §4.1): the photos taken now wait in the phone and leave by themselves when
- * the network comes back; the rest of the administration comes back with it.
+ * The administration opened without an answer from the back end (spec §4.1): no network, or the server of the building stopped.
+ * The photos taken now wait in the phone and leave by themselves; once one leaves, the server answers again and the rest of the
+ * administration comes back.
  */
 export default function OfflinePage({ api, onOnline }: Readonly<{ api: Api; onOnline: () => void }>) {
-  const outbox = useOutbox(api.base, () => undefined);
+  const outbox = useOutbox(api.base, onOnline);
   useEffect(() => {
     globalThis.addEventListener('online', onOnline);
     return () => globalThis.removeEventListener('online', onOnline);
@@ -17,10 +18,10 @@ export default function OfflinePage({ api, onOnline }: Readonly<{ api: Api; onOn
 
   return (
     <div className="space-y-4">
-      <Panel title="Pas de réseau">
+      <Panel title="Administration injoignable">
         <p>
-          L'administration reviendra avec le réseau. En attendant, vos photos restent dans le téléphone et partiront
-          toutes seules dans « À classer ».
+          Pas de réseau, ou le serveur de l'immeuble est arrêté. En attendant, vos photos restent dans le téléphone et
+          partiront toutes seules dans « À classer ».
         </p>
         <button type="button" className={secondaryButton} onClick={onOnline}>
           Réessayer

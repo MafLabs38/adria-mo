@@ -6,8 +6,11 @@ import {
   apiPathOf,
   cacheFirst,
   keepOnly,
+  MAX_OUTBOX,
+  MAX_SHARED,
   networkFirst,
   routeOf,
+  sameOriginAssets,
   SHARE_FIELD,
   SHARE_PATH,
 } from './serviceWorker';
@@ -16,7 +19,10 @@ const scope = new URL('https://adria.example/constats/admin/');
 const route = (method: string, path: string, mode = 'cors') =>
   routeOf(method, new URL(path, 'https://adria.example'), mode, scope, '/api/v1');
 
-/** The Cache API of the browser, in memory. */
+/**
+ * The Cache API of the browser, in memory: matched on the whole address (no `Vary`, no `ignoreSearch`), which is how the
+ * service worker uses it; the e2e tests run the real one.
+ */
 class MemoryCache {
   readonly entries = new Map<string, Response>();
   private static key(request: RequestInfo | URL): string {
@@ -39,9 +45,12 @@ class MemoryCache {
 const cache = () => new MemoryCache() as MemoryCache & Cache;
 
 describe('routeOf', () => {
-  it('receives the photos shared to the address of the manifest', () => {
+  it('receives the photos shared to the address of the manifest, and nothing else posted', () => {
     expect(route('POST', '/constats/admin/partager/')).toBe('share');
     expect(route('GET', '/constats/admin/partager/')).toBe('network');
+    expect(route('POST', '/constats/admin/partager')).toBe('network');
+    expect(route('PUT', '/constats/admin/partager/')).toBe('network');
+    expect(route('DELETE', '/constats/admin/')).toBe('network');
   });
 
   it('keeps the page of the administration and the scripts named by their content', () => {
@@ -73,18 +82,62 @@ describe('apiPathOf', () => {
 });
 
 describe('acceptShare', () => {
-  it('puts the shared photos in the outbox, and nothing else', async () => {
-    const added: OutboxItem[] = [];
-    const store = { add: (item: OutboxItem) => Promise.resolve(void added.push(item)) } as OutboxStore;
-    const form = new FormData();
-    form.append(SHARE_FIELD, new File([new Uint8Array([1])], 'IMG_1.jpg'));
-    form.append(SHARE_FIELD, new File([new Uint8Array([2])], 'IMG_2.jpg'));
-    form.append(SHARE_FIELD, new File([], 'vide.jpg'));
-    form.append(SHARE_FIELD, 'du texte');
-    form.append('title', 'Partage');
+  function memory(count = 0) {
+    const added: OutboxItem[] = Array.from({ length: count }, (_, i) => ({
+      id: `old${i}`,
+      file: new Blob(),
+      name: 'old',
+      addedAt: i,
+    }));
+    const store = {
+      add: (item: OutboxItem) => Promise.resolve(void added.push(item)),
+      all: () => Promise.resolve([...added]),
+    } as OutboxStore;
+    return { added, store };
+  }
+  const form = (count: number) => {
+    const data = new FormData();
+    for (let i = 0; i < count; i++) {
+      data.append(SHARE_FIELD, new File([new Uint8Array([i])], `IMG_${i}.jpg`));
+    }
+    return data;
+  };
 
-    expect(await acceptShare(form, store)).toBe(2);
-    expect(added.map((i) => i.name)).toEqual(['IMG_1.jpg', 'IMG_2.jpg']);
+  it('keeps the shared photos, to be confirmed, and nothing else', async () => {
+    const { added, store } = memory();
+    const shared = form(2);
+    shared.append(SHARE_FIELD, new File([], 'vide.jpg'));
+    shared.append(SHARE_FIELD, 'du texte');
+    shared.append('title', 'Partage');
+
+    expect(await acceptShare(shared, store)).toBe(2);
+    expect(added.map((i) => [i.name, i.shared])).toEqual([
+      ['IMG_0.jpg', true],
+      ['IMG_1.jpg', true],
+    ]);
+  });
+
+  it('takes a limited number of photos from a share and in all', async () => {
+    expect(await acceptShare(form(MAX_SHARED + 5), memory().store)).toBe(MAX_SHARED);
+    expect(await acceptShare(form(10), memory(MAX_OUTBOX - 3).store)).toBe(3);
+    expect(await acceptShare(form(10), memory(MAX_OUTBOX + 1).store)).toBe(0);
+  });
+});
+
+describe('sameOriginAssets', () => {
+  it('keeps the scripts and styles of this site only', () => {
+    expect(
+      sameOriginAssets(
+        [
+          'https://adria.example/_astro/AdminApp.js',
+          'https://adria.example/api/v1/auth/me',
+          'https://adria.example.evil/_astro/x.js',
+          'pas une adresse',
+          42,
+        ],
+        'https://adria.example',
+      ),
+    ).toEqual(['https://adria.example/_astro/AdminApp.js']);
   });
 });
 
@@ -100,8 +153,19 @@ describe('networkFirst', () => {
 
   it('does not keep an error page', async () => {
     const kept = cache();
-    await networkFirst(new Request(page), kept, page, () => Promise.resolve(new Response('down', { status: 502 })));
+    const response = await networkFirst(new Request(page), kept, page, () =>
+      Promise.resolve(new Response('error', { status: 500 })),
+    );
+    expect(response.status).toBe(500);
     expect(kept.entries.size).toBe(0);
+  });
+
+  it('serves the page kept when a proxy answers for a stopped server', async () => {
+    const kept = cache();
+    const stopped = () => Promise.resolve(new Response('bad gateway', { status: 502 }));
+    expect((await networkFirst(new Request(page), kept, page, stopped)).status).toBe(502);
+    await kept.put(page, new Response('kept'));
+    expect(await (await networkFirst(new Request(page), kept, page, stopped)).text()).toBe('kept');
   });
 
   it('serves the page kept when there is no network, and fails without one', async () => {
@@ -132,7 +196,7 @@ describe('cacheFirst and keepOnly', () => {
     await kept.put('https://adria.example/constats/admin/', new Response('page'));
     const fetcher = vi.fn(() => Promise.resolve(new Response('new')));
 
-    await keepOnly(kept, [script, 'https://adria.example/api/v1/auth/me'], fetcher);
+    await keepOnly(kept, [script], fetcher);
 
     expect([...kept.entries.keys()].sort()).toEqual([script, 'https://adria.example/constats/admin/']);
     await keepOnly(kept, [script], fetcher);
@@ -141,7 +205,9 @@ describe('cacheFirst and keepOnly', () => {
 });
 
 describe('the manifest', () => {
-  const manifest = JSON.parse(readFileSync(new URL('../../public/manifest.webmanifest', import.meta.url), 'utf8')) as {
+  const manifest = JSON.parse(
+    readFileSync(new URL('../../public/admin/manifest.webmanifest', import.meta.url), 'utf8'),
+  ) as {
     start_url: string;
     scope: string;
     icons: { sizes: string; purpose: string }[];
@@ -149,15 +215,16 @@ describe('the manifest', () => {
   };
 
   it('shares photos to the address and the field the service worker receives', () => {
-    expect(manifest.share_target.action).toBe(`./admin/${SHARE_PATH}`);
+    expect(manifest.share_target.action).toBe(`./${SHARE_PATH}`);
     expect(manifest.share_target.method).toBe('POST');
     expect(manifest.share_target.enctype).toBe('multipart/form-data');
     expect(manifest.share_target.params.files.map((f) => f.name)).toEqual([SHARE_FIELD]);
   });
 
   it('opens the administration, inside the scope of the service worker, with no address hard-coded', () => {
-    expect(manifest.start_url).toBe('./admin/');
-    expect(manifest.scope).toBe('./admin/');
+    // The manifest lives in admin/, with the service worker: the build for the CDN leaves the whole folder out.
+    expect(manifest.start_url).toBe('./');
+    expect(manifest.scope).toBe('./');
     expect(manifest.icons.map((i) => `${i.sizes} ${i.purpose}`)).toEqual([
       '192x192 any',
       '512x512 any',

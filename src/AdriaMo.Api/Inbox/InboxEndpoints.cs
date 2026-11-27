@@ -8,6 +8,7 @@ using AdriaMo.Core.Photos;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace AdriaMo.Api.Inbox;
@@ -20,6 +21,9 @@ internal static class InboxEndpoints
 {
     /// <summary>The most photos attached at once.</summary>
     public const int MaxAttached = 200;
+
+    /// <summary>SQLite's code of a broken constraint (the unique index of the photos).</summary>
+    private const int UniqueViolation = 19;
 
     /// <summary>Maps <c>/inbox/*</c>.</summary>
     /// <param name="api">The <c>/api/v1</c> group.</param>
@@ -94,11 +98,11 @@ internal static class InboxEndpoints
         {
             await db.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (exception.InnerException is SqliteException { SqliteErrorCode: UniqueViolation })
         {
             // The same photo arrived twice at the same time: the unique index kept one, which is the answer.
             db.Entry(added).State = EntityState.Detached;
-            var raced = await FindAsync(db, sha256, cancellationToken) ?? throw new InvalidOperationException("The photo could not be saved.");
+            var raced = await FindAsync(db, sha256, cancellationToken) ?? throw new InvalidOperationException("The photo could not be saved.", exception);
             return TypedResults.Ok(InboxItem.Of(raced, await AuthorsAsync(db, [raced], cancellationToken)));
         }
 
@@ -132,7 +136,7 @@ internal static class InboxEndpoints
         // photo added.
         var text = ConstatEndpoints.Blank(request.Text);
         var attached = 0;
-        foreach (var photo in photos.OrderBy(p => p.IsDated ? p.TakenAt : p.AddedAt).ThenBy(p => p.Id))
+        foreach (var photo in photos.OrderBy(p => p.ObservedAt).ThenBy(p => p.Id))
         {
             if (constat.Pieces.All(p => p.Photo?.OriginalSha256 != photo.Photo.OriginalSha256))
             {
@@ -154,6 +158,7 @@ internal static class InboxEndpoints
         int id,
         AdriaMoDbContext db,
         PhotoIntake intake,
+        ILogger<InboxPhoto> logger,
         CancellationToken cancellationToken)
     {
         var photo = await db.Inbox.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
@@ -164,9 +169,10 @@ internal static class InboxEndpoints
 
         db.Inbox.Remove(photo);
         await db.SaveChangesAsync(cancellationToken);
-        if (!await db.Pieces.AnyAsync(p => p.Photo!.OriginalSha256 == photo.Photo.OriginalSha256, cancellationToken))
+        if (!await db.Pieces.AnyAsync(p => p.Photo!.OriginalSha256 == photo.Photo.OriginalSha256, cancellationToken)
+            && !intake.Forget(photo.Photo))
         {
-            intake.Forget(photo.Photo);
+            logger.LogWarning("The files of the discarded photo {Sha256} could not all be deleted.", photo.Photo.OriginalSha256);
         }
 
         return TypedResults.NoContent();

@@ -128,17 +128,27 @@ internal sealed class PhotoIntake : IDisposable
     /// copies are not kept without a reason.
     /// </summary>
     /// <param name="photo">The files of the photo.</param>
-    public void Forget(PiecePhoto photo)
+    /// <returns>Whether every file is gone; a file that could not be deleted stays, and the discard is done all the same.</returns>
+    public bool Forget(PiecePhoto photo)
     {
         ArgumentNullException.ThrowIfNull(photo);
-        File.Delete(Path.Join(_originals, Path.GetFileName(photo.OriginalFileName)));
-        foreach (var name in new[] { photo.PublishedFileName, photo.ThumbnailFileName })
+        var paths = new[] { photo.PublishedFileName, photo.ThumbnailFileName }
+            .Select(DerivedPath)
+            .Append(Path.Join(_originals, Path.GetFileName(photo.OriginalFileName)));
+        var gone = true;
+        foreach (var path in paths.OfType<string>())
         {
-            if (DerivedPath(name) is { } path)
+            try
             {
                 File.Delete(path);
             }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                gone = false;
+            }
         }
+
+        return gone;
     }
 
     /// <inheritdoc />

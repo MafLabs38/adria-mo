@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { enqueue, flush, inboxSender, serialized, type OutboxItem, type OutboxStore } from './outbox';
+import {
+  confirmShared,
+  enqueue,
+  flush,
+  forget,
+  inboxSender,
+  isUnreachable,
+  MAX_FAILURES,
+  serialized,
+  type OutboxItem,
+  type OutboxStore,
+} from './outbox';
 
 function memoryStore(): OutboxStore & { items: Map<string, OutboxItem> } {
   const items = new Map<string, OutboxItem>();
@@ -34,7 +45,7 @@ async function filled(...names: string[]) {
   await enqueue(
     store,
     names.map((n) => photo(n)),
-    () => clock++,
+    { now: () => clock++ },
   );
   return store;
 }
@@ -82,14 +93,32 @@ describe('flush', () => {
     expect([...store.items.values()].map((i) => i.name)).toEqual(['b.jpg']);
   });
 
-  it.each([500, 502, 429])('stops when the back end answers %s, and keeps the photo', async (status) => {
-    const store = await filled('a.jpg');
-    expect(await flush(store, () => Promise.resolve(answer(status)))).toEqual({
-      sent: 0,
-      refused: 0,
-      stopped: 'unreachable',
-    });
-    expect(store.items.size).toBe(1);
+  it.each([502, 503, 504, 530, 429])(
+    'stops when a proxy answers %s for a stopped back end, and keeps the photo',
+    async (status) => {
+      const store = await filled('a.jpg');
+      expect(await flush(store, () => Promise.resolve(answer(status)))).toEqual({
+        sent: 0,
+        refused: 0,
+        stopped: 'unreachable',
+      });
+      expect(store.items.size).toBe(1);
+    },
+  );
+
+  it('tries again a photo the back end failed on, sets it aside after a few failures, and goes on with the others', async () => {
+    const store = await filled('broken.jpg', 'b.jpg');
+    const send = (item: OutboxItem) => Promise.resolve(answer(item.name === 'broken.jpg' ? 500 : 201));
+
+    expect(await flush(store, send)).toEqual({ sent: 1, refused: 0, stopped: 'server' });
+    for (let i = 1; i < MAX_FAILURES; i++) {
+      await flush(store, send);
+    }
+
+    expect([...store.items.values()].map((i) => [i.name, i.failures, i.refused])).toEqual([
+      ['broken.jpg', MAX_FAILURES, 'ServerError'],
+    ]);
+    expect(await flush(store, send)).toEqual({ sent: 0, refused: 0, stopped: null });
   });
 
   it.each([401, 403])('stops when the session is gone (%s): the phone must log in again', async (status) => {
@@ -101,27 +130,73 @@ describe('flush', () => {
   });
 
   it('marks a refused photo with its reason, goes on with the others and never sends it again', async () => {
-    const store = await filled('notes.pdf', 'b.jpg', 'big.jpg', 'odd.jpg', 'plain.jpg');
+    const store = await filled('notes.pdf', 'b.jpg', 'big.jpg', 'odd.jpg', 'plain.jpg', 'empty.jpg');
     const answers = [
       answer(400, { errors: { photo: ['NotAnImage'] } }),
       answer(201),
       answer(413),
       answer(400, { errors: {} }),
       new Response('not json', { status: 400 }),
+      answer(400, { errors: { photo: [] } }),
     ];
 
     const outcome = await flush(store, () => Promise.resolve(answers.shift() ?? answer(500)));
 
-    expect(outcome).toEqual({ sent: 1, refused: 4, stopped: null });
+    expect(outcome).toEqual({ sent: 1, refused: 5, stopped: null });
     expect([...store.items.values()].map((i) => [i.name, i.refused])).toEqual([
       ['notes.pdf', 'NotAnImage'],
       ['big.jpg', 'TooLarge'],
       ['odd.jpg', 'NotAnImage'],
       ['plain.jpg', 'NotAnImage'],
+      ['empty.jpg', 'NotAnImage'],
     ]);
     const again = vi.fn();
     expect(await flush(store, again)).toEqual({ sent: 0, refused: 0, stopped: null });
     expect(again).not.toHaveBeenCalled();
+  });
+});
+
+describe('photos shared from the gallery', () => {
+  async function withShared() {
+    const store = await filled('mine.jpg');
+    await enqueue(store, [photo('shared.jpg')], { shared: true, now: () => 2000 });
+    return store;
+  }
+
+  it('are not sent before their owner confirms them', async () => {
+    const store = await withShared();
+    const sent: string[] = [];
+
+    await flush(store, (item) => {
+      sent.push(item.name);
+      return Promise.resolve(answer(201));
+    });
+
+    expect(sent).toEqual(['mine.jpg']);
+    expect([...store.items.values()].map((i) => [i.name, i.shared])).toEqual([['shared.jpg', true]]);
+  });
+
+  it('leave once confirmed', async () => {
+    const store = await withShared();
+    await confirmShared(store);
+
+    const item = [...store.items.values()].find((i) => i.name === 'shared.jpg');
+    expect(item).toEqual({ id: item?.id, file: item?.file, name: 'shared.jpg', addedAt: 2000 });
+  });
+
+  it('can be forgotten without the others, and all photos can be forgotten', async () => {
+    const store = await withShared();
+    await forget(store, 'shared');
+    expect([...store.items.values()].map((i) => i.name)).toEqual(['mine.jpg']);
+    await forget(store, 'all');
+    expect(store.items.size).toBe(0);
+  });
+});
+
+describe('isUnreachable', () => {
+  it('tells a proxy answering for a stopped back end from an answer of the back end', () => {
+    expect([502, 503, 504, 520, 530, 429].every(isUnreachable)).toBe(true);
+    expect([500, 507, 404, 531, 519].some(isUnreachable)).toBe(false);
   });
 });
 
@@ -143,18 +218,24 @@ describe('inboxSender', () => {
 
 describe('serialized', () => {
   it('runs one flush at a time, and once more for what was asked meanwhile', async () => {
+    const releases: (() => void)[] = [];
     let running = 0;
     let most = 0;
     const run = vi.fn(async () => {
       running++;
       most = Math.max(most, running);
-      await new Promise((resolve) => setTimeout(resolve, 5));
+      await new Promise<void>((resolve) => releases.push(resolve));
       running--;
       return { sent: 0, refused: 0, stopped: null };
     });
     const flushOnce = serialized(run);
 
-    await Promise.all([flushOnce(), flushOnce(), flushOnce()]);
+    const all = Promise.all([flushOnce(), flushOnce(), flushOnce()]);
+    for (let i = 0; i < 3; i++) {
+      await vi.waitFor(() => expect(releases).toHaveLength(i + 1));
+      releases[i]?.();
+    }
+    await all;
 
     expect(most).toBe(1);
     expect(run).toHaveBeenCalledTimes(3);

@@ -47,16 +47,15 @@ internal static class DeviceEndpoints
         var current = DeviceSessions.DeviceOf(http.User);
         var now = time.GetUtcNow();
         var devices = await db.Devices.AsNoTracking()
-            .Where(d => d.UserId == userId && d.RevokedAt == null)
+            .Where(d => d.UserId == userId && d.RevokedAt == null && (d.PairedAt != null || d.CodeExpiresAt > now))
             .ToListAsync(cancellationToken);
         return TypedResults.Ok(devices
-            .Where(d => d.PairedAt is not null || PairingRules.IsAlive(d.CodeExpiresAt, now))
             .OrderByDescending(d => d.CreatedAt)
             .Select(d => new DeviceSummary(d.Id, d.Name, d.CreatedAt, d.PairedAt, d.Id == current))
             .ToArray());
     }
 
-    private static async Task<Results<Created<PairingCode>, ValidationProblem, UnauthorizedHttpResult>> CreateAsync(
+    private static async Task<Results<Created<PairingCode>, ValidationProblem, UnauthorizedHttpResult, ForbidHttpResult>> CreateAsync(
         CreateDeviceRequest request,
         HttpContext http,
         UserManager<AdriaMoUser> users,
@@ -69,14 +68,21 @@ internal static class DeviceEndpoints
             return TypedResults.ValidationProblem(new Dictionary<string, string[]> { [problem.Field] = [problem.Code] });
         }
 
+        // Only a session opened with the password pairs a phone: a stolen phone cannot pair another device before it is removed.
+        if (DeviceSessions.DeviceOf(http.User) is not null)
+        {
+            return TypedResults.Forbid();
+        }
+
         var user = await users.GetUserAsync(http.User);
         if (user is null)
         {
             return TypedResults.Unauthorized();
         }
 
-        // One code at a time per account: a code shown and not scanned is dropped when another is asked for.
-        await db.Devices.Where(d => d.UserId == user.Id && d.PairedAt == null).ExecuteDeleteAsync(cancellationToken);
+        // One code at a time per account: a code shown and not scanned is dropped when another is asked for, and so are the
+        // phones removed earlier, which are kept for nothing.
+        await db.Devices.Where(d => d.UserId == user.Id && (d.PairedAt == null || d.RevokedAt != null)).ExecuteDeleteAsync(cancellationToken);
 
         var code = Base64Url.EncodeToString(RandomNumberGenerator.GetBytes(PairingRules.CodeBytes));
         var now = time.GetUtcNow();
@@ -112,7 +118,7 @@ internal static class DeviceEndpoints
 
     private static async Task<Results<Ok<Me>, ProblemHttpResult>> PairAsync(
         PairRequest request,
-        [AsParameters] PairingServices services,
+        [AsParameters] AccountServices services,
         CancellationToken cancellationToken)
     {
         var (users, signIn, db, time, building) = services;
@@ -123,7 +129,7 @@ internal static class DeviceEndpoints
 
         var now = time.GetUtcNow();
         var hash = Hash(request.Code);
-        var device = await db.Devices.FirstOrDefaultAsync(d => d.CodeHash == hash && d.PairedAt == null && d.RevokedAt == null, cancellationToken);
+        var device = await db.Devices.AsNoTracking().FirstOrDefaultAsync(d => d.CodeHash == hash && d.PairedAt == null && d.RevokedAt == null, cancellationToken);
         var user = device is null ? null : await users.FindByIdAsync(device.UserId);
         if (device is null
             || user is null
@@ -134,10 +140,14 @@ internal static class DeviceEndpoints
             return Refused();
         }
 
-        // Used once: the hash goes, so the same code never opens a second session.
-        device.CodeHash = null;
-        device.PairedAt = now;
-        await db.SaveChangesAsync(cancellationToken);
+        // Used once: the code is claimed by one conditional write, so two scans at the same instant cannot both open a session.
+        var claimed = await db.Devices
+            .Where(d => d.Id == device.Id && d.CodeHash == hash && d.PairedAt == null)
+            .ExecuteUpdateAsync(set => set.SetProperty(d => d.CodeHash, (string?)null).SetProperty(d => d.PairedAt, now), cancellationToken);
+        if (claimed != 1)
+        {
+            return Refused();
+        }
 
         var properties = new AuthenticationProperties { IsPersistent = true, IssuedUtc = now, ExpiresUtc = now + PairingRules.DeviceSessionLifetime };
         await signIn.SignInWithClaimsAsync(user, properties, [new Claim(DeviceSessions.DeviceClaim, device.Id)]);
@@ -149,19 +159,6 @@ internal static class DeviceEndpoints
 
     private static string Hash(string code) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(code)));
 }
-
-/// <summary>What pairing needs.</summary>
-/// <param name="Users">The accounts.</param>
-/// <param name="SignIn">The sign-in manager.</param>
-/// <param name="Db">The database.</param>
-/// <param name="Time">The clock.</param>
-/// <param name="Building">The building settings.</param>
-internal sealed record PairingServices(
-    UserManager<AdriaMoUser> Users,
-    SignInManager<AdriaMoUser> SignIn,
-    AdriaMoDbContext Db,
-    TimeProvider Time,
-    IOptions<BuildingOptions> Building);
 
 /// <summary>A phone to pair.</summary>
 /// <param name="Name">The name its owner gives it.</param>

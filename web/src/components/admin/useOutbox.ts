@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  confirmShared,
   enqueue,
   flush,
+  forget,
   inboxSender,
   serialized,
   type FlushOutcome,
@@ -19,6 +21,10 @@ export interface Outbox {
   unavailable: boolean;
   add: (files: readonly File[]) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /** Sends the photos shared from the gallery, once their owner has seen them. */
+  confirm: () => Promise<void>;
+  /** Forgets the photos shared from the gallery. */
+  dismiss: () => Promise<void>;
   send: () => void;
 }
 
@@ -31,6 +37,11 @@ export function useOutbox(apiBase: string, onSent: () => void): Outbox {
   const [items, setItems] = useState<OutboxItem[] | null>(null);
   const [stopped, setStopped] = useState<FlushOutcome['stopped']>(null);
   const [unavailable, setUnavailable] = useState(false);
+  // The latest callback, without making the sending depend on it: a new function at each render must not send again.
+  const onSentRef = useRef(onSent);
+  useEffect(() => {
+    onSentRef.current = onSent;
+  }, [onSent]);
 
   useEffect(() => {
     openOutbox().then(
@@ -53,10 +64,10 @@ export function useOutbox(apiBase: string, onSent: () => void): Outbox {
       setStopped(outcome.stopped);
       void refresh();
       if (outcome.sent > 0) {
-        onSent();
+        onSentRef.current();
       }
     },
-    [refresh, onSent],
+    [refresh],
   );
 
   const sendHere = useMemo(
@@ -110,5 +121,20 @@ export function useOutbox(apiBase: string, onSent: () => void): Outbox {
     [store, refresh],
   );
 
-  return { items, stopped, unavailable, add, remove, send };
+  const confirm = useCallback(async () => {
+    if (store) {
+      await confirmShared(store);
+      await refresh();
+      send();
+    }
+  }, [store, refresh, send]);
+
+  const dismiss = useCallback(async () => {
+    if (store) {
+      await forget(store, 'shared');
+      await refresh();
+    }
+  }, [store, refresh]);
+
+  return { items, stopped, unavailable, add, remove, confirm, dismiss, send };
 }

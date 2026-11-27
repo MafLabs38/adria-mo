@@ -60,6 +60,7 @@ internal sealed class AdriaMoDbContext(DbContextOptions<AdriaMoDbContext> option
             inbox.Property(p => p.AuthorId).HasMaxLength(450);
             inbox.HasOne<AdriaMoUser>().WithMany().HasForeignKey(p => p.AuthorId).OnDelete(DeleteBehavior.Restrict);
             inbox.Ignore(p => p.IsDated);
+            inbox.Ignore(p => p.ObservedAt);
             // One photo waits once: the phone may send it again when an answer is lost on the way.
             inbox.OwnsOne(p => p.Photo, photo => ConfigurePhoto(photo, unique: true));
             inbox.Navigation(p => p.Photo).IsRequired();

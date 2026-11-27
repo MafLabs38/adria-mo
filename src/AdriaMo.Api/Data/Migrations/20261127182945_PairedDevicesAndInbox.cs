@@ -5,7 +5,7 @@
 namespace AdriaMo.Api.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Telephone : Migration
+    public partial class PairedDevicesAndInbox : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

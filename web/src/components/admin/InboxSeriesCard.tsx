@@ -9,6 +9,7 @@ const NEW = 'nouveau';
 interface Props {
   api: Api;
   title: string;
+  timeZone: string;
   photos: InboxItem[];
   constats: ConstatSummary[];
   categories: Category[];
@@ -20,6 +21,7 @@ interface Props {
 export default function InboxSeriesCard({
   api,
   title,
+  timeZone,
   photos,
   constats,
   categories,
@@ -27,6 +29,11 @@ export default function InboxSeriesCard({
   onDiscarded,
 }: Readonly<Props>) {
   const headingId = useId();
+  const time = new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short', timeZone });
+  const describe = (photo: InboxItem) => {
+    const when = photo.takenAt ? 'Prise à ' + time.format(new Date(photo.takenAt)) : 'Sans date';
+    return `${when}, envoyée par ${photo.author}`;
+  };
   const [chosen, setChosen] = useState<Set<number>>(() => new Set(photos.map((p) => p.id)));
   const [target, setTarget] = useState('');
   const [values, setValues] = useState<ConstatFieldValues>({ title: '', category: '', location: '', isPublic: true });
@@ -89,12 +96,12 @@ export default function InboxSeriesCard({
         <fieldset>
           <legend className="sr-only">Photos de la série</legend>
           <ul className="grid grid-cols-3 gap-2">
-            {photos.map((photo) => (
+            {photos.map((photo, index) => (
               <li key={photo.id}>
                 <label className="relative block cursor-pointer">
                   <img
                     src={api.photoUrl(photo.thumbnail)}
-                    alt={`Envoyée par ${photo.author}`}
+                    alt={describe(photo)}
                     loading="lazy"
                     className={`aspect-square w-full rounded-lg object-cover ${chosen.has(photo.id) ? '' : 'opacity-40'}`}
                   />
@@ -103,7 +110,7 @@ export default function InboxSeriesCard({
                     className="absolute top-1 left-1 h-6 w-6"
                     checked={chosen.has(photo.id)}
                     onChange={() => toggle(photo.id)}
-                    aria-label={`Choisir la photo ${photo.id}`}
+                    aria-label={`Choisir la photo ${index + 1} sur ${photos.length}`}
                   />
                 </label>
               </li>

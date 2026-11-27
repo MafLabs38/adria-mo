@@ -13,6 +13,7 @@ import {
   keepOnly,
   networkFirst,
   routeOf,
+  sameOriginAssets,
   SYNC_TAG,
 } from '../lib/serviceWorker';
 
@@ -62,9 +63,9 @@ async function sendOrWait(): Promise<void> {
   }
 }
 
-async function receiveShare(event: WorkerFetchEvent): Promise<Response> {
-  await acceptShare(await event.request.formData(), await openOutbox());
-  event.waitUntil(sendOrWait());
+/** The photos wait in the phone until their owner confirms them on the page: any site can post a form here. */
+async function receiveShare(request: Request): Promise<Response> {
+  await acceptShare(await request.formData(), await openOutbox());
   return Response.redirect(new URL(INBOX_HASH, scope).href, 303);
 }
 
@@ -75,7 +76,7 @@ worker.addEventListener('fetch', (event) => {
   const { request } = event;
   switch (routeOf(request.method, new URL(request.url), request.mode, scope, apiPath)) {
     case 'share':
-      event.respondWith(receiveShare(event));
+      event.respondWith(receiveShare(request));
       break;
     case 'page':
       event.respondWith(caches.open(CACHE_NAME).then((cache) => networkFirst(request, cache, scope.href, fetcher)));
@@ -106,7 +107,7 @@ worker.addEventListener('message', (event) => {
   if (message?.type === 'send') {
     event.waitUntil(sendOrWait());
   } else if (message?.type === 'keep' && Array.isArray(message.urls)) {
-    const urls = message.urls.filter((url): url is string => typeof url === 'string' && url.startsWith(scope.origin));
+    const urls = sameOriginAssets(message.urls, scope.origin);
     event.waitUntil(caches.open(CACHE_NAME).then((cache) => keepOnly(cache, urls, fetcher)));
   }
 });

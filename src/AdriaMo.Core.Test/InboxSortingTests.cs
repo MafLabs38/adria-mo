@@ -24,7 +24,9 @@ public sealed class InboxSortingTests
             [Photo(1, Monday.AddMinutes(2)), Photo(2, Monday.AddHours(3)), Photo(3, Monday), Photo(4, Monday.AddHours(3).AddMinutes(1))],
             new PhotoSeriesGrouper());
 
-        sorted.Series.Select(s => s.Select(p => p.Id)).Should().BeEquivalentTo(new[] { new[] { 2, 4 }, [3, 1] }, o => o.WithStrictOrdering());
+        sorted.Series.Should().HaveCount(2);
+        sorted.Series[0].Select(p => p.Id).Should().Equal(2, 4);
+        sorted.Series[1].Select(p => p.Id).Should().Equal(3, 1);
         sorted.Undated.Should().BeEmpty();
     }
 
@@ -39,6 +41,15 @@ public sealed class InboxSortingTests
 
         sorted.Undated.Select(p => p.Id).Should().Equal(2, 1);
         sorted.Series.Should().ContainSingle().Which.Should().ContainSingle().Which.Id.Should().Be(3);
+    }
+
+    [Fact]
+    public void A_photo_taken_when_it_was_sent_is_dated_and_grouped()
+    {
+        var sorted = InboxSorting.Of([Photo(1, Thursday, Thursday)], new PhotoSeriesGrouper());
+
+        sorted.Series.Should().ContainSingle();
+        sorted.Undated.Should().BeEmpty();
     }
 
     [Fact]
@@ -72,5 +83,7 @@ public sealed class InboxSortingTests
         piece.AddedAt.Should().Be(Thursday, "the deposit is when the photo reached the back end, not when it was classified");
         piece.AuthorId.Should().Be("eric");
         piece.ObservedAt.Should().Be(Monday);
+        photo.ObservedAt.Should().Be(Monday);
+        Photo(8, null).ObservedAt.Should().Be(Thursday, "an undated photo is attached in the order it was sent");
     }
 }

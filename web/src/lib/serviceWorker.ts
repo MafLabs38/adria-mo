@@ -4,7 +4,7 @@
  * cached, and the public pages are outside its scope.
  */
 import { apiUrl } from './api';
-import { enqueue, type OutboxStore } from './outbox';
+import { enqueue, isUnreachable, type OutboxStore } from './outbox';
 
 /** The address the gallery posts shared photos to, under the scope (the `share_target` of the manifest). */
 export const SHARE_PATH = 'partager/';
@@ -46,16 +46,42 @@ export function apiPathOf(scriptUrl: string): string {
   return (configured.startsWith('/') && !configured.startsWith('//') && apiUrl(configured)) || '/api/v1';
 }
 
-/** Puts the photos of a share in the outbox; the other fields and the empty files are ignored. */
+/** The most photos taken from one share, and the most the outbox holds: a hostile page cannot fill the phone. */
+export const MAX_SHARED = 50;
+export const MAX_OUTBOX = 300;
+
+/**
+ * Puts the photos of a share in the outbox, to be confirmed on the page before they leave; the other fields and the empty files
+ * are ignored.
+ */
 export async function acceptShare(form: FormData, store: OutboxStore): Promise<number> {
-  const files = form.getAll(SHARE_FIELD).filter((value): value is File => value instanceof File && value.size > 0);
-  await enqueue(store, files);
+  const room = Math.max(0, MAX_OUTBOX - (await store.all()).length);
+  const files = form
+    .getAll(SHARE_FIELD)
+    .filter((value): value is File => value instanceof File && value.size > 0)
+    .slice(0, Math.min(MAX_SHARED, room));
+  await enqueue(store, files, { shared: true });
   return files.length;
+}
+
+/** The scripts and styles of this site among the addresses the page gives. */
+export function sameOriginAssets(urls: readonly unknown[], origin: string): string[] {
+  return urls.filter((url): url is string => {
+    if (typeof url !== 'string') {
+      return false;
+    }
+    try {
+      const parsed = new URL(url);
+      return parsed.origin === origin && parsed.pathname.includes('/_astro/');
+    } catch {
+      return false;
+    }
+  });
 }
 
 type Fetcher = (request: Request) => Promise<Response>;
 
-/** The page from the network, kept for the next time without network; without network, the page kept. */
+/** The page from the network, kept for the next time; without network, or with its server stopped, the page kept. */
 export async function networkFirst(
   request: Request,
   cache: Cache,
@@ -66,6 +92,9 @@ export async function networkFirst(
     const response = await fetcher(request);
     if (response.ok) {
       await cache.put(pageUrl, response.clone());
+    } else if (isUnreachable(response.status)) {
+      // The proxy answers for a stopped server: the page kept is better than its error page.
+      return (await cache.match(pageUrl)) ?? response;
     }
     return response;
   } catch (error) {
@@ -92,7 +121,7 @@ export async function cacheFirst(request: Request, cache: Cache, fetcher: Fetche
 
 /** Keeps the scripts and styles the page uses now, and forgets those of earlier versions. */
 export async function keepOnly(cache: Cache, urls: readonly string[], fetcher: Fetcher): Promise<void> {
-  const wanted = new Set(urls.filter((url) => url.includes('/_astro/')));
+  const wanted = new Set(urls);
   for (const request of await cache.keys()) {
     if (request.url.includes('/_astro/') && !wanted.has(request.url)) {
       await cache.delete(request);

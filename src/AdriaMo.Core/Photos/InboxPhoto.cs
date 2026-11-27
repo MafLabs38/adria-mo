@@ -29,6 +29,9 @@ public sealed class InboxPhoto
     /// </summary>
     public bool IsDated => TakenAt is { } taken && taken <= AddedAt;
 
+    /// <summary>When the defect was seen: the order in which photos are attached (<see cref="Observation"/>).</summary>
+    public DateTimeOffset ObservedAt => Observation.Of(TakenAt, AddedAt);
+
     /// <summary>The piece this photo becomes in a constat: same files, same dates, same author.</summary>
     /// <param name="constatId">The constat.</param>
     /// <param name="text">The comment that goes with it, or <c>null</c>.</param>

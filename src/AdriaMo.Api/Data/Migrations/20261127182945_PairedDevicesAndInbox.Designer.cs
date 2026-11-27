@@ -10,8 +10,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AdriaMo.Api.Data.Migrations
 {
     [DbContext(typeof(AdriaMoDbContext))]
-    [Migration("20261127175658_Telephone")]
-    partial class Telephone
+    [Migration("20261127182945_PairedDevicesAndInbox")]
+    partial class PairedDevicesAndInbox
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

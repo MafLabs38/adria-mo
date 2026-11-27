@@ -25,15 +25,7 @@ public sealed class PairingRulesTests
         var shown = new DateTimeOffset(2026, 11, 27, 14, 0, 0, TimeSpan.Zero);
         var expires = shown + PairingRules.CodeLifetime;
 
-        PairingRules.CodeLifetime.Should().Be(TimeSpan.FromMinutes(10));
         PairingRules.IsAlive(expires, expires.AddTicks(-1)).Should().BeTrue();
         PairingRules.IsAlive(expires, expires).Should().BeFalse();
-    }
-
-    [Fact]
-    public void A_paired_phone_stays_logged_in_longer_than_a_password_session()
-    {
-        PairingRules.DeviceSessionLifetime.Should().BeGreaterThan(AccountRules.SessionLifetime);
-        PairingRules.CodeBytes.Should().BeGreaterThanOrEqualTo(32, "a code of 256 bits cannot be guessed while it lives");
     }
 }

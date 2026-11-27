@@ -4,6 +4,8 @@ using System.Net.Http.Json;
 using AdriaMo.Api.Constats;
 using AdriaMo.Api.Inbox;
 using AdriaMo.Api.Photos;
+using AdriaMo.Api.Publishing;
+using Microsoft.Extensions.DependencyInjection;
 using SkiaSharp;
 
 namespace AdriaMo.Api.Test;
@@ -39,17 +41,21 @@ public sealed class InboxApiTests(AdriaMoFactory factory) : IClassFixture<AdriaM
     public async Task Photos_are_sorted_in_series_by_the_date_they_were_taken()
     {
         var admin = await AdminAsync();
-        await PostAsync(admin, Photo("2026:11:20 18:00:00", 2));
-        await PostAsync(admin, Photo("2026:11:20 09:02:00", 3));
-        await PostAsync(admin, Photo("2026:11:20 09:00:00", 4));
-        await PostAsync(admin, Photo(null, 5));
+        var evening = await ItemAsync(admin, Photo("2026:11:20 18:00:00", 2));
+        var second = await ItemAsync(admin, Photo("2026:11:20 09:02:00", 3));
+        var first = await ItemAsync(admin, Photo("2026:11:20 09:00:00", 4));
+        var undated = await ItemAsync(admin, Photo(null, 5));
+        int[] mine = [evening.Id, second.Id, first.Id, undated.Id];
 
         var listed = await ListAsync(admin);
 
-        listed.Series.Select(s => s.Photos.Count).Should().Equal(1, 2);
-        listed.Series[1].StartedAt.Should().Be(new DateTimeOffset(2026, 11, 20, 9, 0, 0, TimeSpan.FromHours(1)));
-        listed.Series[1].EndedAt.Should().Be(new DateTimeOffset(2026, 11, 20, 9, 2, 0, TimeSpan.FromHours(1)));
-        listed.Undated.Should().ContainSingle().Which.TakenAt.Should().BeNull();
+        // Only the photos of this test: the inbox is shared by the tests of the class.
+        var series = listed.Series.Where(s => s.Photos.Any(p => mine.Contains(p.Id))).ToArray();
+        series.Select(s => s.Photos.Select(p => p.Id).ToArray()).Should().BeEquivalentTo(
+            [[evening.Id], new[] { first.Id, second.Id }], o => o.WithStrictOrdering());
+        series[1].StartedAt.Should().Be(new DateTimeOffset(2026, 11, 20, 9, 0, 0, TimeSpan.FromHours(1)));
+        series[1].EndedAt.Should().Be(new DateTimeOffset(2026, 11, 20, 9, 2, 0, TimeSpan.FromHours(1)));
+        listed.Undated.Should().ContainSingle(p => mine.Contains(p.Id)).Which.TakenAt.Should().BeNull();
         await DiscardAllAsync(admin, listed);
     }
 
@@ -116,15 +122,62 @@ public sealed class InboxApiTests(AdriaMoFactory factory) : IClassFixture<AdriaM
     public async Task A_discarded_photo_and_its_files_are_gone()
     {
         var admin = await AdminAsync();
-        var item = await ItemAsync(admin, Photo(null, 11));
-        var originals = Path.Join(factory.DataFolder, PhotoIntake.OriginalFolder);
-        var before = Directory.GetFiles(originals).Length;
+        var photo = Photo(null, 11);
+        var item = await ItemAsync(admin, photo);
+        var original = Path.Join(factory.DataFolder, PhotoIntake.OriginalFolder, PhotoIntake.Sha256(photo) + ".jpg");
+        var derived = new[] { item.Photo, item.Thumbnail }.Select(n => Path.Join(factory.DataFolder, PhotoIntake.DerivedFolder, n)).ToArray();
+        File.Exists(original).Should().BeTrue();
 
         (await admin.DeleteAsync($"/api/v1/inbox/{item.Id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
 
-        Directory.GetFiles(originals).Length.Should().Be(before - 1);
+        File.Exists(original).Should().BeFalse();
+        derived.Should().AllSatisfy(path => File.Exists(path).Should().BeFalse());
         (await admin.GetAsync($"/api/v1/photos/{item.Thumbnail}", Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await admin.DeleteAsync($"/api/v1/inbox/{item.Id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task A_discarded_photo_that_a_constat_also_holds_keeps_its_files()
+    {
+        var admin = await AdminAsync();
+        var number = await ConstatApiTests.CreateAsync(admin);
+        var photo = Photo("2026:11:22 15:00:00", 13);
+        var item = await ItemAsync(admin, photo);
+        (await ConstatApiTests.PostPieceAsync(admin, number, photo)).EnsureSuccessStatusCode();
+
+        (await admin.DeleteAsync($"/api/v1/inbox/{item.Id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await admin.GetAsync($"/api/v1/photos/{item.Thumbnail}", Ct)).StatusCode.Should().Be(HttpStatusCode.OK, "the piece still shows it");
+    }
+
+    [Fact]
+    public async Task An_administrator_classifies_the_photos_sent_by_another()
+    {
+        var sender = await AdminAsync();
+        var classifier = await AdminAsync();
+        var item = await ItemAsync(sender, Photo("2026:11:22 16:00:00", 14));
+
+        (await ListAsync(classifier)).Series.SelectMany(s => s.Photos).Should().Contain(p => p.Id == item.Id && p.Author == item.Author);
+        var result = await Attach(classifier, await ConstatApiTests.CreateAsync(classifier), item.Id);
+
+        result.Attached.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task A_photo_waiting_in_the_inbox_is_never_published_until_it_joins_a_public_constat()
+    {
+        var admin = await AdminAsync();
+        var number = await ConstatApiTests.CreateAsync(admin);
+        var item = await ItemAsync(admin, Photo("2026:11:22 17:00:00", 15));
+        var published = Path.Join(factory.PublishFolder, Core.Publishing.PublicSnapshotBuilder.PhotoFolder, item.Photo);
+        var publisher = factory.Services.GetRequiredService<SnapshotPublisher>();
+
+        await publisher.PublishAsync(Ct);
+        File.Exists(published).Should().BeFalse();
+
+        await Attach(admin, number, item.Id);
+        await publisher.PublishAsync(Ct);
+        File.Exists(published).Should().BeTrue();
     }
 
     [Fact]
