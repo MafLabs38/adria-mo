@@ -15,19 +15,16 @@ COPY src/AdriaMo.Core/AdriaMo.Core.csproj src/AdriaMo.Core/
 RUN dotnet restore src/AdriaMo.Api/AdriaMo.Api.csproj
 COPY src/AdriaMo.Api ./src/AdriaMo.Api
 COPY src/AdriaMo.Core ./src/AdriaMo.Core
-RUN dotnet publish src/AdriaMo.Api/AdriaMo.Api.csproj -c Release --no-restore -o /app -p:Version=${VERSION} \
-    && mkdir /data
+RUN dotnet publish src/AdriaMo.Api/AdriaMo.Api.csproj -c Release --no-restore -o /app -p:Version=${VERSION}
 
 # Chiseled image: no shell, no package manager, non-root user by default.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
 WORKDIR /app
 COPY --from=build /app ./
-# The data volume (database and photos), owned by the application's user so that it can write it
-# (SonarQube hotspot docker:S6504, reviewed as safe: no other file of the image is writable by the application).
-COPY --from=build --chown=1654:1654 /data /data
+# No data volume yet: nothing is stored. The storage vertical adds it (a folder the application's user can write, which
+# SonarQube reports as hotspot docker:S6504 for the maintainer to review).
 ENV ASPNETCORE_HTTP_PORTS=8080
 # The app user of the chiseled image, stated so that nothing reads this image as running as root.
 USER 1654:1654
-VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "AdriaMo.Api.dll"]
