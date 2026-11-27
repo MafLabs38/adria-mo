@@ -35,15 +35,18 @@ services:
     ports:
       - ${ADRIAMO_PORT:-8490}:8080
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
       - ./security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
       - ${ADRIAMO_SITE:-../../web/dist}:/site:ro
       - ${ADRIAMO_STATE}/publish:/publish:ro
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
-    # nginx keeps its pid and the bodies it proxies there.
-    tmpfs: ["/tmp:size=64m"]
+    # nginx keeps its pid and the bodies it proxies in /tmp; its configuration is written from the template at start.
+    tmpfs: ["/tmp:size=64m", "/etc/nginx/conf.d:size=1m,uid=101,gid=101"]
+    environment:
+      # The HTTPS proxy in front of the port, the only one trusted to give the client's address (nothing by default).
+      ADRIAMO_TRUSTED_PROXY: ${ADRIAMO_TRUSTED_PROXY:-127.0.0.1/32}
     cpus: 0.5
     mem_limit: 128m
 

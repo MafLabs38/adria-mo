@@ -3,8 +3,8 @@
 Two containers, as in production (spec §10.4): the back end, and an nginx standing for the CDN, which serves the built front,
 the published snapshot (`/data/`) and the way to the API (`/api/`). Stop the back end: the public page stays online.
 
-The session cookie is `Secure`: the administration works over HTTPS (a reverse proxy in front of the port), or on
-`localhost`; the public page works over plain HTTP too.
+The session cookie is `Secure`, and the login page refuses to send a password over plain HTTP: the administration works over
+HTTPS (a reverse proxy in front of the port), or on `localhost`; the public page works over plain HTTP too.
 
 Nothing of the maintainer's machine is in this folder. A start script outside the repository sets:
 
@@ -15,6 +15,7 @@ Nothing of the maintainer's machine is in this folder. A start script outside th
 | `ADRIAMO_PORT` | the port of the static server (default `8490`) |
 | `ADRIAMO_IMAGE` | the back-end image (default `ghcr.io/maflabs38/adria-mo:develop`) |
 | `ADRIAMO_SITE` | the built front (default `../../web/dist`) |
+| `ADRIAMO_TRUSTED_PROXY` | the address of the HTTPS proxy in front of the port, the only one whose `X-Forwarded-For` is believed (the login limit is per client address); default `127.0.0.1/32`, nothing trusted |
 
 ```bash
 cd web && yarn build && cd ..

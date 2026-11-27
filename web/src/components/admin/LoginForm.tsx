@@ -23,6 +23,17 @@ export default function LoginForm({ api, onLoggedIn }: Readonly<{ api: Api; onLo
     }
   };
 
+  if (!globalThis.isSecureContext) {
+    // A password never crosses the network in clear: the administration is reached by HTTPS (or on this machine).
+    return (
+      <Panel title="Connexion">
+        <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+          Cette adresse n'est pas sécurisée : ouvrez l'administration par son adresse en https.
+        </p>
+      </Panel>
+    );
+  }
+
   return (
     <Panel title="Connexion">
       <form onSubmit={(e) => void submit(e)} className="space-y-3">

@@ -1,3 +1,4 @@
+# A template: the image's entrypoint fills ${ADRIAMO_TRUSTED_PROXY} at start.
 # The static server of the sandbox: what Cloudflare Pages and R2 do in production (spec §10.3), plus the way to the API.
 server {
     listen 8080;
@@ -5,12 +6,9 @@ server {
     root /site;
     server_tokens off;
 
-    # The client's own address, for the back end's limit of login attempts: proxies on private networks in front of this
-    # server (the HTTPS proxy, the tunnel) are trusted to say it; the first public address from the right is the client's.
-    set_real_ip_from 10.0.0.0/8;
-    set_real_ip_from 172.16.0.0/12;
-    set_real_ip_from 192.168.0.0/16;
-    set_real_ip_from 127.0.0.1/32;
+    # The client's own address, for the back end's limit of login attempts: only the HTTPS proxy in front of this server
+    # (ADRIAMO_TRUSTED_PROXY, an address or a network) is trusted to say it. Anyone else's X-Forwarded-For is ignored.
+    set_real_ip_from ${ADRIAMO_TRUSTED_PROXY};
     real_ip_header X-Forwarded-For;
     real_ip_recursive on;
 

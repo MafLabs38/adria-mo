@@ -245,6 +245,8 @@ public sealed class AccountTests(AdriaMoFactory factory) : IClassFixture<AdriaMo
         var unknown = await chef.PostAsJsonAsync("/api/v1/users/inconnu/password", new { temporaryPassword = Temporary }, Ct);
 
         (await Codes(weak, "temporaryPassword")).Should().Contain("TooShort");
+        var containsName = await chef.PostAsJsonAsync("/api/v1/users", new { userName = "gaston", temporaryPassword = "gaston et sa porte" }, Ct);
+        (await Codes(containsName, "temporaryPassword")).Should().Equal("ContainsUserName");
         (await Codes(badName, "userName")).Should().Contain("InvalidUserName");
         (await Codes(spaces, "userName")).Should().Contain("InvalidUserName");
         duplicate.StatusCode.Should().Be(HttpStatusCode.Conflict);

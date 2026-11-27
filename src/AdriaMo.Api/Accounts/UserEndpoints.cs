@@ -112,10 +112,17 @@ internal static class UserEndpoints
             : TypedResults.Problem("The password could not be reset.", statusCode: StatusCodes.Status500InternalServerError);
     }
 
-    /// <summary>Each Identity error under its field: the user name ones under <c>userName</c>, the others under <c>temporaryPassword</c>.</summary>
+    /// <summary>The Identity errors about the user name itself; every other one is about the password.</summary>
+    private static readonly HashSet<string> UserNameErrors = new(StringComparer.Ordinal)
+    {
+        nameof(IdentityErrorDescriber.InvalidUserName),
+        nameof(IdentityErrorDescriber.DuplicateUserName),
+    };
+
+    /// <summary>Each Identity error under its field: <c>userName</c> or <c>temporaryPassword</c>.</summary>
     private static ValidationProblem Invalid(IdentityResult result) =>
         TypedResults.ValidationProblem(result.Errors
-            .GroupBy(e => e.Code.Contains("UserName", StringComparison.Ordinal) ? "userName" : "temporaryPassword")
+            .GroupBy(e => UserNameErrors.Contains(e.Code) ? "userName" : "temporaryPassword")
             .ToDictionary(g => g.Key, g => g.Select(e => e.Code).ToArray()));
 }
 
