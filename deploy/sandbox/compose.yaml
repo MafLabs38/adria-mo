@@ -1,0 +1,55 @@
+# The sandbox (spec §10.4), as in production: the back end, and a static server standing for the CDN, which serves the built
+# front and the published snapshot. Stopping the back end leaves the public page online.
+#
+# Every value that names a machine, a folder or a secret comes from the environment (see README.md): nothing of the
+# maintainer's network is in this repository.
+name: adria-mo-sandbox
+
+services:
+  backend:
+    image: ${ADRIAMO_IMAGE:-ghcr.io/maflabs38/adria-mo:develop}
+    restart: unless-stopped
+    environment:
+      ADRIAMO__STORAGE__DATAFOLDER: /data
+      ADRIAMO__STORAGE__PUBLISHFOLDER: /publish
+      ADRIAMO__AUTH__BOOTSTRAPUSERNAME: ${ADRIAMO_SUPER_ADMIN:?the user name of the super-admin}
+      ADRIAMO__AUTH__BOOTSTRAPPASSWORDFILE: /run/secrets/super-admin-password
+      ADRIAMO__NETWORK__BEHINDPROXY: "true"
+      ADRIAMO__PUBLISH__DELAY: ${ADRIAMO_PUBLISH_DELAY:-00:00:03}
+    volumes:
+      - ${ADRIAMO_STATE:?the folder of the sandbox state}/data:/data
+      - ${ADRIAMO_STATE}/publish:/publish
+    secrets:
+      - super-admin-password
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Large uploads are buffered on disk by ASP.NET Core.
+    tmpfs: ["/tmp:size=128m"]
+    cpus: 1.0
+    mem_limit: 768m
+
+  web:
+    image: nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6
+    restart: unless-stopped
+    ports:
+      - ${ADRIAMO_PORT:-8490}:8080
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./security-headers.conf:/etc/nginx/snippets/security-headers.conf:ro
+      - ${ADRIAMO_SITE:-../../web/dist}:/site:ro
+      - ${ADRIAMO_STATE}/publish:/publish:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # nginx keeps its pid and the bodies it proxies in /tmp; its configuration is written from the template at start.
+    tmpfs: ["/tmp:size=64m", "/etc/nginx/conf.d:size=1m,uid=101,gid=101"]
+    environment:
+      # The HTTPS proxy in front of the port, the only one trusted to give the client's address (nothing by default).
+      ADRIAMO_TRUSTED_PROXY: ${ADRIAMO_TRUSTED_PROXY:-127.0.0.1/32}
+    cpus: 0.5
+    mem_limit: 128m
+
+secrets:
+  super-admin-password:
+    file: ${ADRIAMO_STATE}/super-admin-password

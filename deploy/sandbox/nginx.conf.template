@@ -1,0 +1,52 @@
+# A template: the image's entrypoint fills ${ADRIAMO_TRUSTED_PROXY} at start.
+# The static server of the sandbox: what Cloudflare Pages and R2 do in production (spec §10.3), plus the way to the API.
+server {
+    listen 8080;
+    server_name _;
+    root /site;
+    server_tokens off;
+
+    # The client's own address, for the back end's limit of login attempts: only the HTTPS proxy in front of this server
+    # (ADRIAMO_TRUSTED_PROXY, an address or a network) is trusted to say it. Anyone else's X-Forwarded-For is ignored.
+    set_real_ip_from ${ADRIAMO_TRUSTED_PROXY};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
+    # Hidden files and folders (the publisher's .staging) are never served.
+    location ~ /\. {
+        deny all;
+    }
+
+    # The published snapshot: read by the public page, never by the API.
+    location /data/ {
+        alias /publish/;
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        # Photos are named by their content, but a photo withdrawn from the public page (a face, a name) must not stay in
+        # caches for long: one day.
+        location /data/photos/ {
+            include /etc/nginx/snippets/security-headers.conf;
+            add_header Cache-Control "public, max-age=86400" always;
+        }
+    }
+
+    # The administration's API. Only this proxy reaches the back end, so its X-Forwarded-For is the one the back end trusts.
+    location /api/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        # Resolved at each request: nginx starts, and keeps serving the public part, while the back end is stopped.
+        resolver 127.0.0.11 valid=10s ipv6=off;
+        set $backend http://backend:8080;
+        proxy_pass $backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 30m;
+        proxy_connect_timeout 3s;
+        proxy_read_timeout 120s;
+    }
+
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        try_files $uri $uri/ $uri.html =404;
+    }
+}

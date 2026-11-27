@@ -21,15 +21,25 @@ volume of each installation.
 Requirements: .NET SDK 10, Node.js 22.23 or later, Yarn 1.
 
 ```bash
-# Back end on http://localhost:5080 (health: /health/live, info: /api/v1/info)
-dotnet run --project src/AdriaMo.Api
+# Back end on http://localhost:5080 (health: /health/live, info: /api/v1/info). It needs a data folder and a publish
+# folder, and creates the super-admin at first start from a user name and a password file (12 characters or more).
+mkdir -p /tmp/adria && printf 'une phrase de test\n' > /tmp/adria/password
+ADRIAMO__STORAGE__DATAFOLDER=/tmp/adria/data ADRIAMO__STORAGE__PUBLISHFOLDER=/tmp/adria/publish \
+ADRIAMO__AUTH__BOOTSTRAPUSERNAME=chef ADRIAMO__AUTH__BOOTSTRAPPASSWORDFILE=/tmp/adria/password \
+  dotnet run --project src/AdriaMo.Api
 
-# Public site on http://localhost:4321
+# Site on http://localhost:4321; the administration (/admin/) reaches the back end through the dev server's proxy
+# (ADRIAMO_DEV_API, default http://localhost:5080). The public page reads the published snapshot under /data/, which the dev
+# server does not serve: point it at a sandbox with PUBLIC_ADRIAMO_DATA_URL, or run the sandbox.
 cd web && yarn install && yarn dev
 ```
 
 The site can live under a path of another site (spec §10.5): build it with `ADRIAMO_BASE=/constats/ yarn build`. This is a
-build-time variable of the site, distinct from the `ADRIAMO__*` settings of the back end.
+build-time variable of the site, distinct from the `ADRIAMO__*` settings of the back end. `PUBLIC_ADRIAMO_DATA_URL` (where the
+published snapshot is read, default `<base>data/`) and `PUBLIC_ADRIAMO_API_URL` (the administration's API, default `/api/v1`, always on the same origin as the administration's pages)
+are build-time variables too.
+
+The whole thing as in production, with a static server standing for the CDN: [deploy/sandbox](deploy/sandbox/README.md).
 
 ## Tests and checks
 
@@ -41,7 +51,9 @@ dotnet format src/AdriaMo.slnx --verify-no-changes
 cd web
 yarn lint && yarn format:check && yarn typecheck       # ESLint (SonarJS, a11y), Prettier, astro check
 yarn test                                          # Vitest
-yarn build && yarn e2e                             # Playwright, phone-sized browser
+yarn build && yarn e2e                             # Playwright, phone-sized browser (@smoke, simulated snapshot)
+E2E_BASE_URL=http://localhost:8490 E2E_SUPER_ADMIN=… E2E_SUPER_ADMIN_PASSWORD=… \
+  yarn e2e --grep @stack                           # the whole flow on a sandbox; then stop its back end and run @offline
 ```
 
 The CI runs all of this, plus SonarQube, CodeQL, gitleaks, Trivy and the AI review agents; mutation testing (Stryker) runs weekly.

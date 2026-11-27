@@ -1,0 +1,16 @@
+---
+import PublicConstatDetail from '../components/public/PublicConstatDetail';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { withSlash } from '../lib/paths';
+import { dataUrl } from '../lib/snapshot';
+
+const base = withSlash(import.meta.env.BASE_URL);
+const data = dataUrl(base, import.meta.env.PUBLIC_ADRIAMO_DATA_URL);
+---
+
+<BaseLayout
+  title="Constat · Adria MO"
+  description="Un constat des parties communes de l'immeuble, ses photos et son avancement."
+>
+  <PublicConstatDetail client:load data={data} list={base} />
+</BaseLayout>

@@ -17,12 +17,13 @@ COPY src/AdriaMo.Api ./src/AdriaMo.Api
 COPY src/AdriaMo.Core ./src/AdriaMo.Core
 RUN dotnet publish src/AdriaMo.Api/AdriaMo.Api.csproj -c Release --no-restore -o /app -p:Version=${VERSION}
 
-# Chiseled image: no shell, no package manager, non-root user by default.
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled@sha256:7c625e44e5d588b4d7b2a913e94ca4bd5098ce47442da404829e4c7936a764e1
+# Chiseled image: no shell, no package manager, non-root user by default. The "extra" variant carries the time zone data:
+# the building's time zone dates the photos and counts the days (Building:TimeZone).
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled-extra@sha256:c8dd08a50d8ffd19bd8da72edee05a7ac15b486a5b1869cf46fdb370bf1fbc76
 WORKDIR /app
 COPY --from=build /app ./
-# No data volume yet: nothing is stored. The storage vertical adds it (a folder the application's user can write, which
-# SonarQube reports as hotspot docker:S6504 for the maintainer to review).
+# The data and publish folders (ADRIAMO__STORAGE__DATAFOLDER, ADRIAMO__STORAGE__PUBLISHFOLDER) are mounted by the deployment,
+# writable by the user below (see deploy/sandbox): the image itself holds no writable folder.
 ENV ASPNETCORE_HTTP_PORTS=8080
 # The app user of the chiseled image, stated so that nothing reads this image as running as root.
 USER 1654:1654
