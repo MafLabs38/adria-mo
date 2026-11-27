@@ -5,7 +5,7 @@
 # The base images are pinned by digest (the tag says what they are, the digest what they were); Dependabot moves both
 # (an exception to SonarQube's docker:S8431, stated in ci.yml).
 
-FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:10.0@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS build
+FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:11.0@sha256:2794448a07118a6eaf00f29ab5d2bf44928517ce5ff86505a63a69230374f599 AS build
 ARG VERSION=0.0.0-dev
 WORKDIR /build
 COPY global.json Directory.Build.props Directory.Packages.props ./
