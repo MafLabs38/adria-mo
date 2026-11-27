@@ -36,7 +36,7 @@ dotnet test --solution src/AdriaMo.slnx -c Release
 dotnet format src/AdriaMo.slnx --verify-no-changes
 
 cd web
-yarn lint && yarn format:check && yarn check       # ESLint (SonarJS, a11y), Prettier, astro check
+yarn lint && yarn format:check && yarn typecheck       # ESLint (SonarJS, a11y), Prettier, astro check
 yarn test                                          # Vitest
 yarn build && yarn e2e                             # Playwright, phone-sized browser
 ```

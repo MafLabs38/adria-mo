@@ -5,6 +5,11 @@ namespace AdriaMo.Api;
 /// <summary>What the API says about itself: its name and the version it was built with.</summary>
 internal static class InfoEndpoints
 {
+    /// <summary>The information of this build.</summary>
+    private static readonly AppInfo Current = new(
+        "Adria MO",
+        typeof(InfoEndpoints).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown");
+
     /// <summary>Maps <c>GET info</c> on the group.</summary>
     /// <param name="group">The <c>/api/v1</c> group.</param>
     /// <returns>The group, for chaining.</returns>
@@ -13,11 +18,6 @@ internal static class InfoEndpoints
         group.MapGet("/info", () => TypedResults.Ok(Current));
         return group;
     }
-
-    /// <summary>The information of this build.</summary>
-    internal static AppInfo Current { get; } = new(
-        "Adria MO",
-        typeof(InfoEndpoints).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "unknown");
 }
 
 /// <summary>The name and the version of the application.</summary>

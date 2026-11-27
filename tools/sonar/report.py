@@ -53,26 +53,15 @@ def hotspot_lines(host, token, key, where):
     return lines
 
 
-def who_lines(host, token, key, where):
-    """Who the token belongs to and what it may do: the first thing to know when a part of the answer is refused."""
-    current = call(host, token, "users/current")
-    lines = [f"Token of: {current.get('login')} (groups: {', '.join(current.get('groups', [])) or 'none'}; global permissions: {', '.join(current.get('permissions', {}).get('global', [])) or 'none'})"]
-    measures = call(host, token, "measures/component", component=key, metricKeys="new_security_hotspots,new_security_hotspots_reviewed,security_hotspots,security_hotspots_reviewed", **where)
-    for measure in measures["component"].get("measures", []):
-        value = measure.get("value") or measure.get("period", {}).get("value")
-        lines.append(f"  - {measure['metric']}: {value}")
-    return lines
-
-
 def main():
     host, token, key = os.environ["SONAR_HOST_URL"].rstrip("/"), os.environ["SONAR_TOKEN"], os.environ["SONAR_PROJECT_KEY"]
     where = scope(os.environ.get("SONAR_PULL_REQUEST", ""), os.environ.get("SONAR_BRANCH", ""))
     lines = []
-    for part in (gate_lines, issue_lines, hotspot_lines, who_lines):
+    for part in (gate_lines, issue_lines, hotspot_lines):
         try:
             lines += part(host, token, key, where)
         except urllib.error.HTTPError as error:  # a part that cannot be read says so, and why; the others are still told
-            lines.append(f"{part.__name__}: could not be read (HTTP {error.code}: {error.read(300).decode('utf-8', 'replace')})")
+            lines.append(f"{part.__name__}: could not be read (HTTP {error.code} {error.reason})")
         except Exception as error:
             lines.append(f"{part.__name__}: could not be read ({type(error).__name__})")
     text = "\n".join(lines)

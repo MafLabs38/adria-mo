@@ -26,7 +26,7 @@ changing behaviour.
 ```bash
 dotnet build src/AdriaMo.slnx -c Release && dotnet test --solution src/AdriaMo.slnx -c Release
 dotnet format src/AdriaMo.slnx --verify-no-changes
-cd web && yarn lint && yarn format:check && yarn check && yarn test && yarn build && yarn e2e
+cd web && yarn lint && yarn format:check && yarn typecheck && yarn test && yarn build && yarn e2e
 ```
 
 On the maintainer's small build machine, run heavy commands with `nice -n 15` and capped containers (`--cpus 2 --memory 3g`).

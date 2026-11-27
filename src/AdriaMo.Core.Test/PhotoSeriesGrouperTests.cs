@@ -56,6 +56,66 @@ public sealed class PhotoSeriesGrouperTests
         series[0].Photos.Select(p => p.Id).Should().Equal("a", "b");
     }
 
+    [Fact]
+    public void A_single_photo_is_a_series_that_starts_and_ends_with_it()
+    {
+        var only = new PhotoSeriesGrouper().Group([At("a", 0)]).Should().ContainSingle().Subject;
+
+        only.StartedAt.Should().Be(only.EndedAt);
+    }
+
+    [Fact]
+    public void A_long_chain_of_close_photos_stays_one_series_even_when_it_lasts_longer_than_the_gap()
+    {
+        var series = new PhotoSeriesGrouper(TimeSpan.FromMinutes(5)).Group([At("a", 0), At("b", 4), At("c", 8), At("d", 12)]);
+
+        series.Should().ContainSingle().Which.Photos.Should().HaveCount(4);
+    }
+
+    [Fact]
+    public void Photos_are_compared_as_instants_whatever_the_offset_of_the_camera()
+    {
+        var paris = new TakenPhoto("paris", new DateTimeOffset(2026, 11, 23, 10, 0, 0, TimeSpan.FromHours(1)));
+        var utc = new TakenPhoto("utc", new DateTimeOffset(2026, 11, 23, 9, 3, 0, TimeSpan.Zero));
+
+        new PhotoSeriesGrouper().Group([paris, utc]).Should().ContainSingle().Which.Photos.Select(p => p.Id).Should().Equal("paris", "utc");
+    }
+
+    [Fact]
+    public void No_list_is_refused()
+    {
+        var group = () => new PhotoSeriesGrouper().Group(null!);
+
+        group.Should().Throw<ArgumentNullException>();
+    }
+
+    [Fact]
+    public void A_series_cannot_be_empty()
+    {
+        var create = () => new PhotoSeries([]);
+
+        create.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void A_series_cannot_be_out_of_order()
+    {
+        var create = () => new PhotoSeries([At("late", 5), At("early", 0)]);
+
+        create.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void A_series_keeps_its_own_copy_of_the_photos()
+    {
+        var photos = new List<TakenPhoto> { At("a", 0) };
+        var series = new PhotoSeries(photos);
+
+        photos.Add(At("b", 1));
+
+        series.Photos.Should().ContainSingle();
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

@@ -4,9 +4,33 @@ namespace AdriaMo.Core.Photos;
 /// Photos taken a few minutes apart, most likely of the same defect (spec §4.1): the inbox offers to attach a whole series to one
 /// constat at once.
 /// </summary>
-/// <param name="Photos">The photos of the series, oldest first.</param>
-public sealed record PhotoSeries(IReadOnlyList<TakenPhoto> Photos)
+public sealed record PhotoSeries
 {
+    /// <summary>Creates a series.</summary>
+    /// <param name="photos">The photos of the series: at least one, oldest first. The list is copied.</param>
+    public PhotoSeries(IEnumerable<TakenPhoto> photos)
+    {
+        ArgumentNullException.ThrowIfNull(photos);
+        var copy = photos.ToArray();
+        if (copy.Length == 0)
+        {
+            throw new ArgumentException("A series holds at least one photo.", nameof(photos));
+        }
+
+        for (var i = 1; i < copy.Length; i++)
+        {
+            if (copy[i].TakenAt < copy[i - 1].TakenAt)
+            {
+                throw new ArgumentException("The photos of a series are ordered, oldest first.", nameof(photos));
+            }
+        }
+
+        Photos = copy;
+    }
+
+    /// <summary>The photos of the series, oldest first.</summary>
+    public IReadOnlyList<TakenPhoto> Photos { get; }
+
     /// <summary>When the first photo of the series was taken.</summary>
     public DateTimeOffset StartedAt => Photos[0].TakenAt;
 

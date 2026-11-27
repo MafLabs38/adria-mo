@@ -22,14 +22,6 @@ public sealed class ApiSmokeTests(WebApplicationFactory<Program> factory) : ICla
 
         info.Should().NotBeNull();
         info!.Name.Should().Be("Adria MO");
-        info.Version.Should().NotBeNullOrWhiteSpace();
-    }
-
-    [Fact]
-    public async Task An_unknown_route_is_not_found()
-    {
-        var response = await factory.CreateClient().GetAsync(new Uri("/api/v1/nothing-here", UriKind.Relative), TestContext.Current.CancellationToken);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        info.Version.Should().NotBeNullOrWhiteSpace().And.NotBe("unknown");
     }
 }

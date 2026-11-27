@@ -297,7 +297,7 @@ Le dépôt est **public** : un étudiant en informatique du voisinage pourra lir
 proposer des PR. On le traite comme un vrai projet, au niveau de Portarr.
 
 - **Création par `github-template`** : dépôt, branches `main` et `develop` protégées, gitflow
-  (`feature/*` → `develop` → `main`), modèles de PR et d'issues, Dependabot, labels.
+  (`feat/*`, `fix/*` → `develop` → `main`), modèles de PR et d'issues, Dependabot, labels.
 - **Fichiers d'un projet ouvert** : `LICENSE` (MIT), `README.md` (lancer le projet en local en une
   commande), `CONTRIBUTING.md`, `SECURITY.md`, `CLAUDE.md`.
 - **CI exigeante** (une PR n'est fusionnable que tout au vert) :
@@ -308,7 +308,7 @@ proposer des PR. On le traite comme un vrai projet, au niveau de Portarr.
     puis classer, publier) ;
   - **tests de mutation** (Stryker.NET et Stryker JS, modèles `mutation-dotnet` / `mutation-node`) ;
   - SonarQube (quality gate), **CodeQL**, gitleaks ;
-  - les **cinq agents de revue** (`ai-review.yml`) et `review-decisions`, comme sur Portarr.
+  - les **quatre agents de revue** (`ai-review.yml` : tests, qualité, sécurité, architecture) et `review-decisions`, comme sur Portarr.
 - **Ce qu'impose un dépôt public** :
   - **le dépôt ne contient que le code et la structure** : aucune donnée, aucun secret, aucune
     adresse email, aucune vraie photo, aucun rapport. Tout cela vit dans la base et le volume. Les

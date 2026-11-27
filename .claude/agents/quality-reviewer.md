@@ -21,7 +21,7 @@ Read `CLAUDE.md` (non-negotiable rules) and `docs/spec.md` (the product, the rol
 4. **Frontend (Astro + Tailwind)**: theme tokens only (no raw colours or sizes), mobile first, accessibility (roles, labels, contrast, status not conveyed by colour alone), JavaScript only where an island needs it, base path never hard-coded.
 5. **Readability**: comments that explain *why*, consistent naming, consistency with surrounding code; English in code and technical docs, French in the user interface.
 
-Run `dotnet build -c Release`, `dotnet format --verify-no-changes`, `yarn lint` and `yarn check` in `web/`, and report anything they flag. On a small machine run heavy commands with `nice`.
+Run `dotnet build -c Release`, `dotnet format --verify-no-changes`, `yarn lint` and `yarn typecheck` in `web/`, and report anything they flag. On a small machine run heavy commands with `nice`.
 
 ## Decisions already taken
 

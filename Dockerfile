@@ -25,8 +25,7 @@ COPY --from=build /app ./
 # The data volume (database and photos), owned by the application's user so that it can write it
 # (SonarQube hotspot docker:S6504, reviewed as safe: no other file of the image is writable by the application).
 COPY --from=build --chown=1654:1654 /data /data
-ENV ADRIAMO__DATAFOLDER=/data \
-    ASPNETCORE_HTTP_PORTS=8080
+ENV ASPNETCORE_HTTP_PORTS=8080
 # The app user of the chiseled image, stated so that nothing reads this image as running as root.
 USER 1654:1654
 VOLUME /data

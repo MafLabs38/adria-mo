@@ -1,5 +1,8 @@
-# The maintainer reviews what runs with the repository's secrets or decides what ships.
-/.github/   @Maf38
-/.claude/   @Maf38
-/Dockerfile @Maf38
-/tools/     @Maf38
+# The maintainer reviews what runs with the repository's secrets, decides what ships, and owns the rules the review agents judge by.
+/.github/                      @Maf38
+/.claude/                      @Maf38
+/Dockerfile                    @Maf38
+/tools/                        @Maf38
+/CLAUDE.md                     @Maf38
+/docs/spec.md                  @Maf38
+/docs/review-decisions/README.md @Maf38

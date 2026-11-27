@@ -1,5 +1,5 @@
-# The title of a pull request into develop becomes the squash commit, and the Conventional Commits decide the next version
-# (docs/releasing.md): a title that is not one silently drops a fix from the release. No secret, no checkout, no third-party action.
+# The title of a pull request into develop becomes the squash commit, and the Conventional Commits will decide the next version
+# (the production vertical adds the release): a title that is not one would silently drop a fix from the release. No secret, no checkout, no third-party action.
 name: PR title
 
 on:
