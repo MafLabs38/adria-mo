@@ -13,10 +13,19 @@ namespace AdriaMo.Api.Photos;
 /// Takes in a photo (spec §3, §4): keeps the original as received, with its SHA-256; reads the date it was taken; makes the copy
 /// that may be published (reduced, upright, re-encoded without any metadata, so without GPS) and its thumbnail.
 /// </summary>
-internal sealed class PhotoIntake
+internal sealed class PhotoIntake : IDisposable
 {
     /// <summary>The largest photo accepted, in bytes.</summary>
     public const long MaxBytes = 25 * 1024 * 1024;
+
+    /// <summary>
+    /// The largest photo accepted, in pixels: a small file can claim a huge image. Phones save 12 to 50 megapixels by default; a
+    /// format the codec cannot decode at a smaller scale (PNG) then holds 4 bytes a pixel, 256 MB at most.
+    /// </summary>
+    public const long MaxPixels = 64_000_000;
+
+    /// <summary>Photos decoded at once: each holds a few hundred megabytes while it is reduced.</summary>
+    public const int Parallelism = 2;
 
     /// <summary>The longest side of the published copy, in pixels.</summary>
     public const int PublishedSize = 1600;
@@ -33,21 +42,22 @@ internal sealed class PhotoIntake
     private readonly string _originals;
     private readonly string _derived;
     private readonly TimeZoneInfo _buildingTimeZone;
+    private readonly SemaphoreSlim _decoding = new(Parallelism, Parallelism);
 
     /// <summary>Creates the intake.</summary>
     /// <param name="storage">The storage settings.</param>
     /// <param name="building">The building settings.</param>
     public PhotoIntake(IOptions<StorageOptions> storage, IOptions<BuildingOptions> building)
     {
-        _originals = Path.Combine(storage.Value.DataFolder, OriginalFolder);
-        _derived = Path.Combine(storage.Value.DataFolder, DerivedFolder);
+        _originals = Path.Join(storage.Value.DataFolder, OriginalFolder);
+        _derived = Path.Join(storage.Value.DataFolder, DerivedFolder);
         _buildingTimeZone = TimeZoneInfo.FindSystemTimeZoneById(building.Value.TimeZone);
     }
 
     /// <summary>The path of a published copy or thumbnail, or <c>null</c> when the name is not one this intake gives.</summary>
     /// <param name="fileName">The file name.</param>
     /// <returns>The path, or <c>null</c>.</returns>
-    public string? DerivedPath(string fileName) => IsDerivedName(fileName) ? Path.Combine(_derived, fileName) : null;
+    public string? DerivedPath(string fileName) => IsDerivedName(fileName) ? Path.Join(_derived, fileName) : null;
 
     /// <summary>Whether a name is one this intake gives to a derived file: 64 lower-case hexadecimal digits and ".jpg".</summary>
     /// <param name="fileName">The file name.</param>
@@ -55,38 +65,77 @@ internal sealed class PhotoIntake
     public static bool IsDerivedName(string fileName) =>
         fileName.Length == 68 && fileName.EndsWith(".jpg", StringComparison.Ordinal) && fileName[..64].All(char.IsAsciiHexDigitLower);
 
+    /// <summary>The SHA-256 of a file, in lower-case hexadecimal: the name of an original and the proof it was not changed.</summary>
+    /// <param name="content">The file.</param>
+    /// <returns>Its hash.</returns>
+    public static string Sha256(byte[] content) => Convert.ToHexStringLower(SHA256.HashData(content));
+
     /// <summary>Takes in a photo.</summary>
     /// <param name="content">The file as received.</param>
     /// <param name="cancellationToken">The cancellation.</param>
-    /// <returns>The photo and its date, or <c>null</c> when the file is not an image this intake can read.</returns>
-    public async Task<IntakenPhoto?> AcceptAsync(byte[] content, CancellationToken cancellationToken)
+    /// <returns>The photo and its date, or the code of the problem: <c>NotAnImage</c>, <c>TooManyPixels</c>.</returns>
+    public async Task<IntakeResult> AcceptAsync(byte[] content, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(content);
         using var codec = SKCodec.Create(SKData.CreateCopy(content));
         if (codec is null)
         {
-            return null;
+            return IntakeResult.Refused("NotAnImage");
         }
 
-        using var decoded = SKBitmap.Decode(codec);
-        if (decoded is null)
+        if ((long)codec.Info.Width * codec.Info.Height > MaxPixels)
         {
-            return null;
+            return IntakeResult.Refused("TooManyPixels");
         }
 
-        var sha256 = Convert.ToHexStringLower(SHA256.HashData(content));
-        var originalName = sha256 + Extension(codec.EncodedFormat);
-        System.IO.Directory.CreateDirectory(_originals);
-        System.IO.Directory.CreateDirectory(_derived);
-        await WriteOnceAsync(Path.Combine(_originals, originalName), content, cancellationToken);
+        await _decoding.WaitAsync(cancellationToken);
+        try
+        {
+            using var decoded = Decode(codec);
+            if (decoded is null)
+            {
+                return IntakeResult.Refused("NotAnImage");
+            }
 
-        using var upright = Upright(decoded, codec.EncodedOrigin);
-        var (publishedName, width, height) = await WriteReducedAsync(upright, PublishedSize, 82, cancellationToken);
-        var (thumbnailName, _, _) = await WriteReducedAsync(upright, ThumbnailSize, 75, cancellationToken);
+            var sha256 = Sha256(content);
+            var originalName = sha256 + Extension(codec.EncodedFormat);
+            System.IO.Directory.CreateDirectory(_originals);
+            System.IO.Directory.CreateDirectory(_derived);
+            await WriteOnceAsync(Path.Join(_originals, originalName), content, cancellationToken);
 
-        return new IntakenPhoto(
-            new PiecePhoto(sha256, originalName, publishedName, thumbnailName, width, height),
-            TakenAt(content));
+            using var upright = Upright(decoded, codec.EncodedOrigin);
+            var (publishedName, width, height) = await WriteReducedAsync(upright, PublishedSize, 82, cancellationToken);
+            var (thumbnailName, _, _) = await WriteReducedAsync(upright, ThumbnailSize, 75, cancellationToken);
+            return new IntakeResult(
+                new IntakenPhoto(new PiecePhoto(sha256, originalName, publishedName, thumbnailName, width, height), TakenAt(content)),
+                null);
+        }
+        finally
+        {
+            _decoding.Release();
+        }
+    }
+
+    /// <inheritdoc />
+    public void Dispose() => _decoding.Dispose();
+
+    /// <summary>Decodes at the smallest size the codec offers that is still at least twice the published size: a 50-megapixel
+    /// photo is never held whole in memory.</summary>
+    private static SKBitmap? Decode(SKCodec codec)
+    {
+        var longest = Math.Max(codec.Info.Width, codec.Info.Height);
+        var scale = Math.Min(1f, 2f * PublishedSize / longest);
+        var size = codec.GetScaledDimensions(scale);
+        var info = new SKImageInfo(size.Width, size.Height, SKImageInfo.PlatformColorType, SKAlphaType.Premul);
+        var bitmap = new SKBitmap(info);
+        var result = codec.GetPixels(info, bitmap.GetPixels());
+        if (result is SKCodecResult.Success or SKCodecResult.IncompleteInput)
+        {
+            return bitmap;
+        }
+
+        bitmap.Dispose();
+        return null;
     }
 
     private DateTimeOffset? TakenAt(byte[] content)
@@ -120,7 +169,7 @@ internal sealed class PhotoIntake
         using var encoded = image.Encode(SKEncodedImageFormat.Jpeg, quality);
         var bytes = encoded.ToArray();
         var name = Convert.ToHexStringLower(SHA256.HashData(bytes)) + ".jpg";
-        await WriteOnceAsync(Path.Combine(_derived, name), bytes, cancellationToken);
+        await WriteOnceAsync(Path.Join(_derived, name), bytes, cancellationToken);
         return (name, width, height);
     }
 
@@ -200,6 +249,17 @@ internal sealed class PhotoIntake
             File.Delete(temporary);
         }
     }
+}
+
+/// <summary>What the intake made of a file: a photo, or the code of the problem.</summary>
+/// <param name="Photo">The photo, or <c>null</c>.</param>
+/// <param name="Problem">The code of the problem, or <c>null</c>.</param>
+internal sealed record IntakeResult(IntakenPhoto? Photo, string? Problem)
+{
+    /// <summary>A refused file.</summary>
+    /// <param name="problem">The code of the problem.</param>
+    /// <returns>The result.</returns>
+    public static IntakeResult Refused(string problem) => new(null, problem);
 }
 
 /// <summary>A photo taken in.</summary>

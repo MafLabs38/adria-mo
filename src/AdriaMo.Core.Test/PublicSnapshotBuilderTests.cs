@@ -48,6 +48,7 @@ public sealed class PublicSnapshotBuilderTests
 
         published.Title.Should().Be("Porte du hall forcée");
         published.Category.Should().Be("Portes et fermetures");
+        published.CategoryKey.Should().Be("portes");
         published.Location.Should().Be("Hall bât. B");
         published.Status.Should().Be("reported-to-landlord");
         published.FirstObservedAt.Should().Be(Now.AddDays(-5));
@@ -93,6 +94,22 @@ public sealed class PublicSnapshotBuilderTests
         hidden.Pieces.Add(ConstatTests.NewPiece(Now, Now, photo: Photo with { PublishedFileName = "secret.jpg", ThumbnailFileName = "secret-t.jpg" }));
 
         PublicSnapshotBuilder.PublishedFiles([shown, hidden]).Should().BeEquivalentTo(["pub1.jpg", "thumb1.jpg"]);
+    }
+
+    [Fact]
+    public void A_photo_whose_files_are_missing_is_left_out_but_its_piece_stays()
+    {
+        var constat = ConstatTests.NewConstat();
+        constat.Pieces.Add(ConstatTests.NewPiece(Now, Now, id: 1, photo: Photo, text: "Gond arraché"));
+        constat.Pieces.Add(ConstatTests.NewPiece(Now, Now, id: 2, photo: Photo with { PublishedFileName = "ok.jpg", ThumbnailFileName = "ok-t.jpg" }));
+        bool Available(PiecePhoto photo) => photo.PublishedFileName == "ok.jpg";
+
+        var pieces = PublicSnapshotBuilder.Build([constat], Now, "Europe/Paris", Available).Constats.Single().Pieces;
+
+        pieces[0].Photo.Should().BeNull();
+        pieces[0].Text.Should().Be("Gond arraché");
+        pieces[1].Photo!.Src.Should().Be("photos/ok.jpg");
+        PublicSnapshotBuilder.PublishedFiles([constat], Available).Should().BeEquivalentTo(["ok.jpg", "ok-t.jpg"]);
     }
 
     [Fact]

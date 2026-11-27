@@ -260,8 +260,10 @@ non validée, aucun original de photo.
 | Livraison | image `ghcr.io/maflabs38/adria-mo` pour le back-end ; front sur Pages, par la CI |
 
 Adresses (production) : la partie publique sous `adria-residents.fr/constats` (§ 10.5) ou sur sa
-propre adresse ; l'administration et l'API sur des sous-domaines d'`adria-residents.fr` (la zone est
-déjà chez Cloudflare), pour que la connexion admin fonctionne sans bricolage.
+propre adresse. **L'administration et son API sont servies sous une même adresse** (un sous-domaine
+d'`adria-residents.fr`, la zone est déjà chez Cloudflare) : les pages d'administration et `/api/` y
+sont routées par le tunnel, comme le fait le serveur statique du bac à sable. Le cookie de session
+et l'en-tête propre à l'application n'ont ainsi besoin d'aucune autorisation entre sites (CORS).
 
 Coût : 0 € (Pages, R2, tunnel en formule gratuite). Les clés d'écriture R2 sont un secret du
 back-end (fichier monté), jamais dans le dépôt.
@@ -355,6 +357,12 @@ Claude, réservé aux agents de revue de la CI) ; nom **Adria MO** (dépôt `adr
 .NET chez toi, partie publique publiée chez Cloudflare (§ 10) ; front Astro comme Adria, intégrable
 (§ 10.5) ; **Android d'abord** (le téléphone du premier administrateur), rien de spécifique pour l'iPhone ; un site
 consultable dans le navigateur, **pas d'appli du Play Store**.
+
+Décidé le 2026-11-27 (verticale 1a) : la base passe par **Entity Framework Core et ses migrations**
+plutôt que FluentMigrator (ASP.NET Core Identity s'appuie déjà dessus) ; le téléphone envoie
+**l'original de la photo** (il porte l'empreinte et la date), le serveur en tire la version publiée
+(la réduction dans le navigateur, pour la 4G, viendra avec l'envoi différé) ; l'administration et
+son API partagent une adresse (§ 10.3) ; une photo de plus de 64 millions de pixels est refusée.
 
 Encore ouvert :
 

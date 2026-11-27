@@ -9,11 +9,11 @@ const when = new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short' });
 /** The temporary password to hand over, shown once to the super-admin. */
 function Handover({ userName, password }: Readonly<{ userName: string; password: string }>) {
   return (
-    <div role="status" className="rounded-lg bg-accent-400/30 p-3 text-sm">
+    <output className="block rounded-lg bg-accent-400/30 p-3 text-sm">
       Donnez à <strong>{userName}</strong> ce mot de passe provisoire, de vive voix :{' '}
       <code className="font-mono text-base font-bold">{password}</code>
       <br />À sa première connexion, il devra en choisir un à lui.
-    </div>
+    </output>
   );
 }
 
@@ -27,29 +27,43 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
   const load = useCallback(() => api.get<UserSummary[]>('/users').then(setUsers, setError), [api]);
   useEffect(() => void load(), [load]);
 
+  const [busy, setBusy] = useState(false);
+
   const create = async (event: SyntheticEvent) => {
     event.preventDefault();
     setError(null);
+    setBusy(true);
     try {
       await api.post('/users', { userName, temporaryPassword: password });
       setHandover({ userName, password });
       setUserName('');
       setPassword(suggestPassphrase());
       await load();
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
+    } finally {
+      setBusy(false);
     }
   };
 
   const reset = async (user: UserSummary) => {
+    const confirmed = globalThis.confirm(
+      `Réinitialiser le mot de passe de ${user.userName} ? Ses sessions seront fermées et il devra en choisir un nouveau.`,
+    );
+    if (!confirmed) {
+      return;
+    }
     const temporary = suggestPassphrase();
     setError(null);
+    setBusy(true);
     try {
       await api.post(`/users/${encodeURIComponent(user.id)}/password`, { temporaryPassword: temporary });
       setHandover({ userName: user.userName, password: temporary });
       await load();
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -69,7 +83,7 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
                   {u.lockedOutUntil ? ` · bloqué jusqu'à ${when.format(new Date(u.lockedOutUntil))}` : ''}
                 </p>
               </div>
-              <button type="button" className={secondaryButton} onClick={() => void reset(u)}>
+              <button type="button" className={secondaryButton} disabled={busy} onClick={() => void reset(u)}>
                 Réinitialiser le mot de passe
               </button>
             </li>
@@ -79,7 +93,7 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
       <Panel title="Nouvel administrateur">
         <form onSubmit={(e) => void create(e)} className="space-y-3">
           <label className="block font-medium">
-            Identifiant
+            <span>Identifiant</span>
             <input
               className={inputClass}
               required
@@ -92,7 +106,7 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
           </label>
           <div className="flex items-end gap-2">
             <label className="block flex-1 font-medium">
-              Mot de passe provisoire
+              <span>Mot de passe provisoire</span>
               <input
                 className={inputClass}
                 required
@@ -106,7 +120,7 @@ export default function UsersPanel({ api }: Readonly<{ api: Api }>) {
               Autre
             </button>
           </div>
-          <button type="submit" className={`${primaryButton} w-full`}>
+          <button type="submit" className={`${primaryButton} w-full`} disabled={busy}>
             Créer le compte
           </button>
         </form>

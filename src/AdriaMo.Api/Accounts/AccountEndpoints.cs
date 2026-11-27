@@ -1,6 +1,8 @@
 using AdriaMo.Api.Data;
+using AdriaMo.Api.Settings;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 
 namespace AdriaMo.Api.Accounts;
 
@@ -27,7 +29,8 @@ internal static class AccountEndpoints
         LoginRequest request,
         UserManager<AdriaMoUser> users,
         SignInManager<AdriaMoUser> signIn,
-        IPasswordHasher<AdriaMoUser> hasher)
+        IPasswordHasher<AdriaMoUser> hasher,
+        IOptions<BuildingOptions> building)
     {
         var user = string.IsNullOrWhiteSpace(request.UserName) ? null : await users.FindByNameAsync(request.UserName.Trim());
         if (user is null)
@@ -38,7 +41,13 @@ internal static class AccountEndpoints
         }
 
         var result = await signIn.PasswordSignInAsync(user, request.Password ?? "", isPersistent: true, lockoutOnFailure: true);
-        return result.Succeeded ? TypedResults.Ok(await MeOf(users, user)) : Refused();
+        if (result.IsLockedOut)
+        {
+            // Identity refuses a locked account without hashing: hash anyway, so the time does not tell that the account exists.
+            hasher.VerifyHashedPassword(DummyAccount.User, DummyAccount.Hash(hasher), request.Password ?? "");
+        }
+
+        return result.Succeeded ? TypedResults.Ok(await MeOf(users, user, building)) : Refused();
     }
 
     private static async Task<NoContent> LogoutAsync(SignInManager<AdriaMoUser> signIn)
@@ -47,17 +56,21 @@ internal static class AccountEndpoints
         return TypedResults.NoContent();
     }
 
-    private static async Task<Results<Ok<Me>, UnauthorizedHttpResult>> MeAsync(HttpContext http, UserManager<AdriaMoUser> users)
+    private static async Task<Results<Ok<Me>, UnauthorizedHttpResult>> MeAsync(
+        HttpContext http,
+        UserManager<AdriaMoUser> users,
+        IOptions<BuildingOptions> building)
     {
         var user = await users.GetUserAsync(http.User);
-        return user is null ? TypedResults.Unauthorized() : TypedResults.Ok(await MeOf(users, user));
+        return user is null ? TypedResults.Unauthorized() : TypedResults.Ok(await MeOf(users, user, building));
     }
 
     private static async Task<Results<Ok<Me>, ValidationProblem, UnauthorizedHttpResult>> ChangePasswordAsync(
         ChangePasswordRequest request,
         HttpContext http,
         UserManager<AdriaMoUser> users,
-        SignInManager<AdriaMoUser> signIn)
+        SignInManager<AdriaMoUser> signIn,
+        IOptions<BuildingOptions> building)
     {
         var user = await users.GetUserAsync(http.User);
         if (user is null)
@@ -80,20 +93,17 @@ internal static class AccountEndpoints
         user.MustChangePassword = false;
         await users.UpdateAsync(user);
         await signIn.RefreshSignInAsync(user);
-        return TypedResults.Ok(await MeOf(users, user));
+        return TypedResults.Ok(await MeOf(users, user, building));
     }
 
     private static ProblemHttpResult Refused() =>
         TypedResults.Problem(LoginRefused, statusCode: StatusCodes.Status401Unauthorized, title: "Connexion refusée");
 
-    /// <summary>A validation problem on the new password, whose codes the interface says in French.</summary>
-    /// <param name="codes">The codes (<see cref="AdriaMo.Core.Accounts.PasswordProblem"/> names, or Identity's).</param>
-    /// <returns>The problem.</returns>
-    internal static ValidationProblem Invalid(params string[] codes) =>
+    private static ValidationProblem Invalid(params string[] codes) =>
         TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["newPassword"] = codes });
 
-    private static async Task<Me> MeOf(UserManager<AdriaMoUser> users, AdriaMoUser user) =>
-        new(user.UserName ?? "", [.. await users.GetRolesAsync(user)], user.MustChangePassword);
+    private static async Task<Me> MeOf(UserManager<AdriaMoUser> users, AdriaMoUser user, IOptions<BuildingOptions> building) =>
+        new(user.UserName ?? "", [.. await users.GetRolesAsync(user)], user.MustChangePassword, building.Value.TimeZone);
 
     /// <summary>An account that does not exist, whose hash is computed once, to verify a password against when the user is unknown.</summary>
     private static class DummyAccount
@@ -121,4 +131,5 @@ internal sealed record ChangePasswordRequest(string? CurrentPassword, string? Ne
 /// <param name="UserName">Its user name.</param>
 /// <param name="Roles">Its roles.</param>
 /// <param name="MustChangePassword">Whether it must choose a password before anything else.</param>
-internal sealed record Me(string UserName, IReadOnlyList<string> Roles, bool MustChangePassword);
+/// <param name="TimeZone">The time zone of the building, in which the administration shows dates.</param>
+internal sealed record Me(string UserName, IReadOnlyList<string> Roles, bool MustChangePassword, string TimeZone);

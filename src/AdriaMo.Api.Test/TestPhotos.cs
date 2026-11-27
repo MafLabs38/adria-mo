@@ -15,10 +15,19 @@ internal static class TestPhotos
         string? offset = null,
         ushort? orientation = null,
         bool gps = false,
-        SKColor? colour = null)
+        SKColor? colour = null,
+        bool markTopLeft = false)
     {
         using var bitmap = new SKBitmap(width, height);
         bitmap.Erase(colour ?? new SKColor(200, 80, 40));
+        if (markTopLeft)
+        {
+            // A red quarter in the top-left corner, on a blue image: where it lands tells which way the image was turned.
+            bitmap.Erase(new SKColor(0, 0, 255));
+            using var canvas = new SKCanvas(bitmap);
+            using var red = new SKPaint { Color = new SKColor(255, 0, 0) };
+            canvas.DrawRect(0, 0, width / 2f, height / 2f, red);
+        }
         using var image = SKImage.FromBitmap(bitmap);
         using var data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
         var jpeg = data.ToArray();
@@ -29,6 +38,49 @@ internal static class TestPhotos
 
         var app1 = Exif(takenAt, offset, orientation, gps);
         return [.. jpeg.AsSpan(0, 2), .. app1, .. jpeg.AsSpan(2)];
+    }
+
+    /// <summary>The start of a PNG that claims a size, without its pixels: enough for a decoder to read the size.</summary>
+    public static byte[] PngHeader(uint width, uint height)
+    {
+        var ihdr = new byte[13];
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr, width);
+        BinaryPrimitives.WriteUInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = 8; // bit depth
+        ihdr[9] = 2; // RGB
+        byte[] chunk = [.. "IHDR"u8, .. ihdr];
+        var crc = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(chunk));
+        var length = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(length, 13);
+        byte[] end = [0, 0, 0, 0, .. "IEND"u8, 0xAE, 0x42, 0x60, 0x82];
+        return [0x89, (byte)'P', (byte)'N', (byte)'G', 0x0D, 0x0A, 0x1A, 0x0A, .. length, .. chunk, .. crc, .. Idat(), .. end];
+    }
+
+    /// <summary>A data chunk with an empty compressed stream: the image is cut short, as a forged file would be.</summary>
+    private static byte[] Idat()
+    {
+        byte[] data = [.. "IDAT"u8, 0x78, 0x9C, 0x03, 0x00, 0x00, 0x00, 0x00, 0x01];
+        var crc = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(data));
+        var length = new byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(length, (uint)(data.Length - 4));
+        return [.. length, .. data, .. crc];
+    }
+
+    private static uint Crc32(byte[] data)
+    {
+        var crc = 0xFFFFFFFFu;
+        foreach (var b in data)
+        {
+            crc ^= b;
+            for (var k = 0; k < 8; k++)
+            {
+                crc = (crc & 1) != 0 ? (crc >> 1) ^ 0xEDB88320u : crc >> 1;
+            }
+        }
+
+        return ~crc;
     }
 
     /// <summary>The APP1 segment: "Exif", a little-endian TIFF header, IFD0, the EXIF IFD and the GPS IFD.</summary>

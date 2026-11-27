@@ -1,6 +1,6 @@
 /**
  * A temporary password the super-admin can read aloud (spec §2.1): four groups of syllables, such as "bavo-kimu-sela-ripo".
- * Nineteen characters from a random source, about 53 bits: enough for a password that must be changed at the first login.
+ * Nineteen characters from a random source: 70⁸ combinations, about 49 bits: enough for a password that must be changed at the first login.
  */
 const CONSONANTS = 'bdfgklmnprstvz';
 const VOWELS = 'aeiou';

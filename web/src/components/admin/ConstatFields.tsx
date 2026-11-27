@@ -18,7 +18,7 @@ export default function ConstatFields({ values, categories, onChange }: Readonly
   return (
     <>
       <label className="block font-medium">
-        Titre
+        <span>Titre</span>
         <input
           className={inputClass}
           required
@@ -29,7 +29,7 @@ export default function ConstatFields({ values, categories, onChange }: Readonly
         />
       </label>
       <label className="block font-medium">
-        Catégorie
+        <span>Catégorie</span>
         <select
           className={inputClass}
           required
@@ -45,7 +45,7 @@ export default function ConstatFields({ values, categories, onChange }: Readonly
         </select>
       </label>
       <label className="block font-medium">
-        Emplacement
+        <span>Emplacement</span>
         <input
           className={inputClass}
           maxLength={120}
@@ -61,7 +61,7 @@ export default function ConstatFields({ values, categories, onChange }: Readonly
           checked={values.isPublic}
           onChange={(e) => onChange({ ...values, isPublic: e.target.checked })}
         />
-        Visible sur la page publique
+        <span>Visible sur la page publique</span>
       </label>
     </>
   );

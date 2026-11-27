@@ -7,6 +7,7 @@ using AdriaMo.Api.Publishing;
 using AdriaMo.Api.Security;
 using AdriaMo.Api.Settings;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -19,11 +20,14 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDbContext<AdriaMoDbContext>((services, options) =>
 {
     var folder = services.GetRequiredService<IOptions<StorageOptions>>().Value.DataFolder;
-    options.UseSqlite($"Data Source={Path.Combine(folder, "adria-mo.db")}");
+    options.UseSqlite(new SqliteConnectionStringBuilder { DataSource = Path.Join(folder, StorageOptions.DatabaseFile) }.ToString());
 });
+// Hosted services start in this order: the migration first, then the accounts, then the publisher.
+builder.Services.AddHostedService<DatabaseMigrator>();
 builder.Services.AddAdriaMoAccounts();
 builder.Services.AddSingleton<PhotoIntake>();
 builder.Services.AddSingleton<PublishQueue>();
+builder.Services.AddSingleton<PublicationStatus>();
 builder.Services.AddSingleton<SnapshotPublisher>();
 builder.Services.AddHostedService(services => services.GetRequiredService<SnapshotPublisher>());
 builder.Services.AddHealthChecks();

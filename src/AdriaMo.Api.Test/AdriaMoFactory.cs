@@ -13,11 +13,11 @@ public class AdriaMoFactory : WebApplicationFactory<Program>
     public const string SuperAdmin = "chef";
     public const string SuperAdminPassword = "la loge du gardien";
 
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "adria-mo-test-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root = Path.Join(Path.GetTempPath(), "adria-mo-test-" + Guid.NewGuid().ToString("N"));
 
-    public string DataFolder => Path.Combine(_root, "data");
+    public string DataFolder => Path.Join(_root, "data");
 
-    public string PublishFolder => Path.Combine(_root, "publish");
+    public string PublishFolder => Path.Join(_root, "publish");
 
     /// <summary>Settings a test changes, applied over the defaults of the factory.</summary>
     protected virtual IDictionary<string, string?> Settings => new Dictionary<string, string?>();
@@ -56,7 +56,7 @@ public class AdriaMoFactory : WebApplicationFactory<Program>
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         Directory.CreateDirectory(_root);
-        var passwordFile = Path.Combine(_root, "super-admin-password");
+        var passwordFile = Path.Join(_root, "super-admin-password");
         File.WriteAllText(passwordFile, BootstrapPassword + "\n");
 
         builder.UseSetting("Storage:DataFolder", DataFolder);

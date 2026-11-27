@@ -15,8 +15,8 @@ export default function LoginForm({ api, onLoggedIn }: Readonly<{ api: Api; onLo
     setError(null);
     try {
       onLoggedIn(await api.post<Me>('/auth/login', { userName, password }));
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
       setPassword('');
     } finally {
       setBusy(false);
@@ -27,7 +27,7 @@ export default function LoginForm({ api, onLoggedIn }: Readonly<{ api: Api; onLo
     <Panel title="Connexion">
       <form onSubmit={(e) => void submit(e)} className="space-y-3">
         <label className="block font-medium">
-          Identifiant
+          <span>Identifiant</span>
           <input
             className={inputClass}
             autoComplete="username"
@@ -38,7 +38,7 @@ export default function LoginForm({ api, onLoggedIn }: Readonly<{ api: Api; onLo
           />
         </label>
         <label className="block font-medium">
-          Mot de passe
+          <span>Mot de passe</span>
           <input
             className={inputClass}
             type="password"

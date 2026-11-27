@@ -26,6 +26,7 @@ internal static class ConstatEndpoints
         editor.MapPut("/constats/{id:int}", UpdateAsync);
         editor.MapPost("/constats/{id:int}/pieces", AddPieceAsync).DisableAntiforgery();
         editor.MapGet("/photos/{name}", Photo);
+        editor.MapGet("/publication", (PublicationStatus status) => TypedResults.Ok(status.Current));
         return api;
     }
 
@@ -121,19 +122,9 @@ internal static class ConstatEndpoints
     {
         var (db, intake, users, http, publish, time) = services;
         var comment = Blank(text);
-        if (comment is null && photo is null)
+        if (CheckPiece(comment, photo) is { } invalid)
         {
-            return Invalid("piece", "Empty");
-        }
-
-        if (comment?.Length > Constat.TextMaxLength)
-        {
-            return Invalid("text", "TooLong");
-        }
-
-        if (photo is not null && (photo.Length == 0 || photo.Length > PhotoIntake.MaxBytes))
-        {
-            return Invalid("photo", "TooLarge");
+            return invalid;
         }
 
         var constat = await db.Constats.Include(c => c.Pieces).FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
@@ -142,21 +133,24 @@ internal static class ConstatEndpoints
             return TypedResults.NotFound();
         }
 
-        IntakenPhoto? intaken = null;
+        PiecePhoto? stored = null;
+        DateTimeOffset? takenAt = null;
         if (photo is not null)
         {
-            using var buffer = new MemoryStream((int)photo.Length);
-            await photo.CopyToAsync(buffer, cancellationToken);
-            intaken = await intake.AcceptAsync(buffer.ToArray(), cancellationToken);
-            if (intaken is null)
-            {
-                return Invalid("photo", "NotAnImage");
-            }
-
-            if (constat.Pieces.Any(p => p.Photo?.OriginalSha256 == intaken.Photo.OriginalSha256))
+            var content = await ReadAsync(photo, cancellationToken);
+            var sha256 = PhotoIntake.Sha256(content);
+            if (constat.Pieces.Any(p => p.Photo?.OriginalSha256 == sha256))
             {
                 return TypedResults.Conflict("AlreadyAdded");
             }
+
+            var intaken = await intake.AcceptAsync(content, cancellationToken);
+            if (intaken.Photo is null)
+            {
+                return Invalid("photo", intaken.Problem ?? "NotAnImage");
+            }
+
+            (stored, takenAt) = (intaken.Photo.Photo, intaken.Photo.TakenAt);
         }
 
         var now = time.GetUtcNow();
@@ -164,16 +158,38 @@ internal static class ConstatEndpoints
         {
             ConstatId = constat.Id,
             Text = comment,
-            TakenAt = intaken?.TakenAt,
+            TakenAt = takenAt,
             AddedAt = now,
             AuthorId = users.GetUserId(http.User)!,
-            Photo = intaken?.Photo,
+            Photo = stored,
         };
         constat.Pieces.Add(piece);
         constat.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         publish.Request();
         return TypedResults.Created($"/api/v1/constats/{constat.Id}", PieceDetail.Of(piece));
+    }
+
+    private static ValidationProblem? CheckPiece(string? comment, IFormFile? photo)
+    {
+        if (ConstatRules.CheckPiece(comment, photo is not null) is { } problem)
+        {
+            return Invalid(problem == "Empty" ? "piece" : "text", problem);
+        }
+
+        return photo?.Length switch
+        {
+            0 => Invalid("photo", "EmptyFile"),
+            > PhotoIntake.MaxBytes => Invalid("photo", "TooLarge"),
+            _ => null,
+        };
+    }
+
+    private static async Task<byte[]> ReadAsync(IFormFile file, CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream((int)file.Length);
+        await file.CopyToAsync(buffer, cancellationToken);
+        return buffer.ToArray();
     }
 
     private static Results<PhysicalFileHttpResult, NotFound> Photo(string name, PhotoIntake intake)
@@ -186,27 +202,7 @@ internal static class ConstatEndpoints
 
     private static ValidationProblem? Validate(ConstatRequest request)
     {
-        var errors = new Dictionary<string, string[]>();
-        var title = request.Title?.Trim() ?? "";
-        if (title.Length == 0)
-        {
-            errors["title"] = ["Required"];
-        }
-        else if (title.Length > Constat.TitleMaxLength)
-        {
-            errors["title"] = ["TooLong"];
-        }
-
-        if (Categories.Find(request.Category) is null)
-        {
-            errors["category"] = ["Unknown"];
-        }
-
-        if (request.Location?.Trim().Length > Constat.LocationMaxLength)
-        {
-            errors["location"] = ["TooLong"];
-        }
-
+        var errors = ConstatRules.Check(request.Title, request.Category, request.Location);
         return errors.Count == 0 ? null : TypedResults.ValidationProblem(errors);
     }
 

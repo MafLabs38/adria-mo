@@ -66,9 +66,9 @@ function Page({ api, me, hash, onMe, failures, onCreated }: Readonly<PageProps>)
   const match = /^#\/constats\/(\d+)$/.exec(hash);
   if (match?.[1]) {
     const number = Number(match[1]);
-    return <ConstatEditor key={number} api={api} number={number} failures={failures} />;
+    return <ConstatEditor key={number} api={api} number={number} failures={failures} timeZone={me.timeZone} />;
   }
-  return <ConstatList api={api} />;
+  return <ConstatList api={api} timeZone={me.timeZone} />;
 }
 
 export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {

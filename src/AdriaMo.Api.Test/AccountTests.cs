@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AdriaMo.Api.Accounts;
 using AdriaMo.Api.Data;
+using AdriaMo.Core.Accounts;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace AdriaMo.Api.Test;
@@ -25,7 +26,7 @@ public sealed class AccountTests(AdriaMoFactory factory) : IClassFixture<AdriaMo
         var cookie = response.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("__Host-adriamo=", StringComparison.Ordinal)).ToLowerInvariant();
         cookie.Should().Contain("httponly").And.Contain("secure").And.Contain("samesite=strict").And.Contain("path=/").And.Contain("expires=");
         var me = await client.GetFromJsonAsync<Me>("/api/v1/auth/me", Ct);
-        me.Should().BeEquivalentTo(new Me(AdriaMoFactory.SuperAdmin, ["super-admin"], false));
+        me.Should().BeEquivalentTo(new Me(AdriaMoFactory.SuperAdmin, ["super-admin"], false, "Europe/Paris"));
     }
 
     [Fact]
@@ -67,6 +68,79 @@ public sealed class AccountTests(AdriaMoFactory factory) : IClassFixture<AdriaMo
         (await client.GetAsync("/api/v1/info", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
+    [Theory]
+    [InlineData("/API/v1/auth/login")]
+    [InlineData("/Api/V1/constats/1/pieces")]
+    [InlineData("/anything")]
+    public async Task The_application_header_is_required_whatever_the_path_and_its_case(string path)
+    {
+        var client = factory.CreateClient(new() { BaseAddress = new Uri("https://localhost") });
+
+        var response = await client.PostAsJsonAsync(path, new { userName = AdriaMoFactory.SuperAdmin, password = AdriaMoFactory.SuperAdminPassword }, Ct);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Four_failures_do_not_lock_and_a_success_starts_the_count_again()
+    {
+        await factory.AdminAsync("presque", "la porte du hall b");
+        var client = factory.Client();
+        async Task FailAsync(int times)
+        {
+            for (var i = 0; i < times; i++)
+            {
+                await client.PostAsJsonAsync("/api/v1/auth/login", new { userName = "presque", password = "pas le bon mot de passe" }, Ct);
+            }
+        }
+
+        await FailAsync(4);
+        await factory.LoggedInAsync("presque", "la porte du hall b");
+        await FailAsync(4);
+        var again = await factory.LoggedInAsync("presque", "la porte du hall b");
+
+        (await again.GetAsync("/api/v1/auth/me", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Theory]
+    [InlineData("GET", "/api/v1/constats")]
+    [InlineData("POST", "/api/v1/constats")]
+    [InlineData("GET", "/api/v1/constats/1")]
+    [InlineData("PUT", "/api/v1/constats/1")]
+    [InlineData("POST", "/api/v1/constats/1/pieces")]
+    [InlineData("GET", "/api/v1/categories")]
+    [InlineData("GET", "/api/v1/publication")]
+    [InlineData("GET", "/api/v1/users")]
+    public async Task A_temporary_password_opens_nothing_and_no_session_opens_nothing(string method, string path)
+    {
+        var chef = await factory.SuperAdminAsync();
+        var userName = "provisoire-" + Guid.NewGuid().ToString("N")[..8];
+        (await chef.PostAsJsonAsync("/api/v1/users", new { userName, temporaryPassword = Temporary }, Ct)).EnsureSuccessStatusCode();
+        var temporary = await factory.LoggedInAsync(userName, Temporary);
+
+        (await temporary.SendAsync(Request(method, path), Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await factory.Client().SendAsync(Request(method, path), Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task An_administrator_cannot_manage_accounts()
+    {
+        var admin = await factory.AdminAsync("simple-admin");
+
+        (await admin.PostAsJsonAsync("/api/v1/users", new { userName = "intrus", temporaryPassword = Temporary }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await admin.PostAsJsonAsync("/api/v1/users/x/password", new { temporaryPassword = Temporary }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    private static HttpRequestMessage Request(string method, string path) => new(new HttpMethod(method), path)
+    {
+        Content = method switch
+        {
+            "GET" => null,
+            _ when path.EndsWith("/pieces", StringComparison.Ordinal) => new MultipartFormDataContent { { new StringContent("x"), "text" } },
+            _ => JsonContent.Create(new { title = "x", category = "portes" }),
+        },
+    };
+
     [Fact]
     public async Task A_new_administrator_must_choose_a_password_before_anything_else()
     {
@@ -81,7 +155,7 @@ public sealed class AccountTests(AdriaMoFactory factory) : IClassFixture<AdriaMo
         var changed = await admin.PostAsJsonAsync("/api/v1/auth/password", new { currentPassword = Temporary, newPassword = "ma propre phrase à moi" }, Ct);
 
         changed.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await changed.Content.ReadFromJsonAsync<Me>(Ct)).Should().BeEquivalentTo(new Me("nouveau", ["admin"], false));
+        (await changed.Content.ReadFromJsonAsync<Me>(Ct)).Should().BeEquivalentTo(new Me("nouveau", ["admin"], false, "Europe/Paris"));
         (await admin.GetAsync("/api/v1/constats", Ct)).StatusCode.Should().Be(HttpStatusCode.OK);
         (await admin.GetAsync("/api/v1/users", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         await factory.LoggedInAsync("nouveau", "ma propre phrase à moi");
@@ -200,18 +274,20 @@ public sealed class AccountTests(AdriaMoFactory factory) : IClassFixture<AdriaMo
         var hash = Convert.FromBase64String(user.PasswordHash!);
         hash[0].Should().Be(0x01, "format v3 of Identity");
         BinaryPrimitives.ReadUInt32BigEndian(hash.AsSpan(1)).Should().Be(2, "HMAC-SHA512");
-        BinaryPrimitives.ReadUInt32BigEndian(hash.AsSpan(5)).Should().Be((uint)PasswordPolicy.Iterations);
+        BinaryPrimitives.ReadUInt32BigEndian(hash.AsSpan(5)).Should().Be((uint)AccountRules.HashIterations);
         BinaryPrimitives.ReadUInt32BigEndian(hash.AsSpan(9)).Should().Be(16, "a 128-bit salt");
-        PasswordPolicy.Iterations.Should().Be(210_000);
+        AccountRules.HashIterations.Should().Be(210_000);
     }
 
     [Fact]
     public async Task An_accent_typed_another_way_is_the_same_password()
     {
         // Set with "é" as one character, typed with "e" and a combining accent.
-        await factory.AdminAsync("accent", "un été au hall b");
+        await factory.AdminAsync("accent", "un \u00e9t\u00e9 au hall b");
 
-        await factory.LoggedInAsync("accent", "un été au hall b");
+        var client = await factory.LoggedInAsync("accent", "un e\u0301te\u0301 au hall b");
+
+        (await client.GetFromJsonAsync<Me>("/api/v1/auth/me", Ct))!.UserName.Should().Be("accent");
     }
 
     [Fact]

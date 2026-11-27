@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using AdriaMo.Api.Data;
 using AdriaMo.Api.Photos;
 using AdriaMo.Api.Settings;
+using AdriaMo.Core.Constats;
 using AdriaMo.Core.Publishing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -27,11 +28,13 @@ internal sealed class PublishQueue
 
 /// <summary>
 /// Publishes the public snapshot (spec §10.2): <c>constats.json</c> and the photos of public constats, into the publish folder
-/// the static server or the CDN serves. Publishes at start, then after each change (gathered for <see cref="PublishOptions.Delay"/>).
-/// A photo that is no longer public leaves the folder.
+/// the static server or the CDN serves. Publishes at start, after each change (gathered for <see cref="PublishOptions.Delay"/>),
+/// and once a day at least. A failure is recorded in <see cref="PublicationStatus"/> and retried, waiting longer each time. A
+/// photo that is no longer public leaves the folder.
 /// </summary>
 /// <param name="services">The root services.</param>
 /// <param name="queue">The requests.</param>
+/// <param name="status">The outcome of the publications.</param>
 /// <param name="options">The publication settings.</param>
 /// <param name="storage">The storage settings.</param>
 /// <param name="building">The building settings.</param>
@@ -40,6 +43,7 @@ internal sealed class PublishQueue
 internal sealed partial class SnapshotPublisher(
     IServiceProvider services,
     PublishQueue queue,
+    PublicationStatus status,
     IOptions<PublishOptions> options,
     IOptions<StorageOptions> storage,
     IOptions<BuildingOptions> building,
@@ -49,6 +53,15 @@ internal sealed partial class SnapshotPublisher(
     /// <summary>The name of the published data file.</summary>
     public const string SnapshotFile = "constats.json";
 
+    /// <summary>The longest time between two publications.</summary>
+    public static readonly TimeSpan Daily = TimeSpan.FromDays(1);
+
+    /// <summary>The first wait before a failed publication is tried again; it doubles up to <see cref="MaxRetryDelay"/>.</summary>
+    public static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMinutes(1);
+
+    /// <summary>The longest wait before a failed publication is tried again.</summary>
+    public static readonly TimeSpan MaxRetryDelay = TimeSpan.FromMinutes(30);
+
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private readonly SemaphoreSlim _oneAtATime = new(1, 1);
@@ -56,16 +69,38 @@ internal sealed partial class SnapshotPublisher(
     /// <inheritdoc />
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await TryPublishAsync(stoppingToken);
-        while (await queue.Reader.WaitToReadAsync(stoppingToken))
+        var retry = FirstRetryDelay;
+        var succeeded = await TryPublishAsync(stoppingToken);
+        while (!stoppingToken.IsCancellationRequested)
         {
-            await Task.Delay(options.Value.Delay, time, stoppingToken);
+            if (await WaitForRequestAsync(succeeded ? Daily : retry, stoppingToken))
+            {
+                await Task.Delay(options.Value.Delay, time, stoppingToken);
+            }
+
             while (queue.Reader.TryRead(out _))
             {
                 // Every request made until now is served by the publication below.
             }
 
-            await TryPublishAsync(stoppingToken);
+            succeeded = await TryPublishAsync(stoppingToken);
+            retry = succeeded ? FirstRetryDelay : TimeSpan.FromTicks(Math.Min(retry.Ticks * 2, MaxRetryDelay.Ticks));
+        }
+    }
+
+    /// <summary>Waits for a request, or for the given time.</summary>
+    /// <returns>Whether a request came.</returns>
+    private async Task<bool> WaitForRequestAsync(TimeSpan timeout, CancellationToken stoppingToken)
+    {
+        using var timer = new CancellationTokenSource(timeout, time);
+        using var either = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, timer.Token);
+        try
+        {
+            return await queue.Reader.WaitToReadAsync(either.Token);
+        }
+        catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+        {
+            return false;
         }
     }
 
@@ -99,27 +134,30 @@ internal sealed partial class SnapshotPublisher(
         var constats = await db.Constats.AsNoTracking().Include(c => c.Pieces).ToListAsync(cancellationToken);
 
         var target = storage.Value.PublishFolder;
-        var photos = Path.Combine(target, PublicSnapshotBuilder.PhotoFolder);
+        var photos = Path.Join(target, PublicSnapshotBuilder.PhotoFolder);
         Directory.CreateDirectory(photos);
 
-        var files = PublicSnapshotBuilder.PublishedFiles(constats);
+        var derived = Path.Join(storage.Value.DataFolder, PhotoIntake.DerivedFolder);
+        bool IsAvailable(PiecePhoto photo) =>
+            File.Exists(Path.Join(derived, photo.PublishedFileName)) && File.Exists(Path.Join(derived, photo.ThumbnailFileName));
+        var files = PublicSnapshotBuilder.PublishedFiles(constats, IsAvailable);
         foreach (var file in files)
         {
-            var destination = Path.Combine(photos, file);
+            var destination = Path.Join(photos, file);
             if (!File.Exists(destination))
             {
-                File.Copy(Path.Combine(storage.Value.DataFolder, PhotoIntake.DerivedFolder, file), destination);
+                File.Copy(Path.Join(derived, file), destination);
             }
         }
 
-        var snapshot = PublicSnapshotBuilder.Build(constats, time.GetUtcNow(), building.Value.TimeZone);
-        var temporary = Path.Combine(target, SnapshotFile + ".tmp");
+        var snapshot = PublicSnapshotBuilder.Build(constats, time.GetUtcNow(), building.Value.TimeZone, IsAvailable);
+        var temporary = Path.Join(target, SnapshotFile + ".tmp");
         await using (var stream = File.Create(temporary))
         {
             await JsonSerializer.SerializeAsync(stream, snapshot, Json, cancellationToken);
         }
 
-        File.Move(temporary, Path.Combine(target, SnapshotFile), overwrite: true);
+        File.Move(temporary, Path.Join(target, SnapshotFile), overwrite: true);
 
         // After the new snapshot: a page never refers to a photo already removed.
         foreach (var stale in Directory.EnumerateFiles(photos).Where(f => !files.Contains(Path.GetFileName(f))))
@@ -131,16 +169,23 @@ internal sealed partial class SnapshotPublisher(
         return snapshot;
     }
 
-    private async Task TryPublishAsync(CancellationToken cancellationToken)
+    [System.Diagnostics.CodeAnalysis.SuppressMessage(
+        "Design",
+        "CA1031:Do not catch general exception types",
+        Justification = "A failed publication must never stop the back end: the public page keeps the previous snapshot, the failure is shown in the administration and retried.")]
+    private async Task<bool> TryPublishAsync(CancellationToken cancellationToken)
     {
         try
         {
-            await PublishAsync(cancellationToken);
+            var snapshot = await PublishAsync(cancellationToken);
+            status.Succeeded(snapshot.PublishedAt);
+            return true;
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DbUpdateException or InvalidOperationException)
+        catch (Exception exception) when (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
         {
-            // The public page keeps the previous snapshot; the next change or start publishes again.
+            status.Failed(time.GetUtcNow(), exception.GetType().Name);
             LogFailed(logger, exception);
+            return false;
         }
     }
 

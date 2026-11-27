@@ -4,6 +4,7 @@ import { coverPhoto, dataUrl, fileUrl, parseSnapshot, type PublicConstat } from 
 const constat: PublicConstat = {
   number: 3,
   title: 'Porte du hall forcée',
+  categoryKey: 'portes',
   category: 'Portes et fermetures',
   location: null,
   status: 'open',

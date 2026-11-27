@@ -27,14 +27,14 @@ public sealed class PublishingTests(AdriaMoFactory factory) : IClassFixture<Adri
         constat.GetProperty("category").GetString().Should().Be("Portes et fermetures");
         constat.GetProperty("firstObservedAt").GetString().Should().Be("2026-11-23T09:15:00+01:00");
         var photo = constat.GetProperty("pieces")[0].GetProperty("photo");
-        File.Exists(Path.Combine(factory.PublishFolder, photo.GetProperty("src").GetString()!)).Should().BeTrue();
-        File.Exists(Path.Combine(factory.PublishFolder, photo.GetProperty("thumbnail").GetString()!)).Should().BeTrue();
+        File.Exists(Path.Join(factory.PublishFolder, photo.GetProperty("src").GetString()!)).Should().BeTrue();
+        File.Exists(Path.Join(factory.PublishFolder, photo.GetProperty("thumbnail").GetString()!)).Should().BeTrue();
         snapshot.RootElement.GetProperty("timeZone").GetString().Should().Be("Europe/Paris");
 
-        var text = await File.ReadAllTextAsync(Path.Combine(factory.PublishFolder, SnapshotPublisher.SnapshotFile), Ct);
+        var text = await File.ReadAllTextAsync(Path.Join(factory.PublishFolder, SnapshotPublisher.SnapshotFile), Ct);
         text.Should().NotContain("publie").And.NotContain("author", "no account is published")
             .And.NotContain("sha256", "nor the proof of the original").And.NotContain("original");
-        Directory.GetFiles(Path.Combine(factory.PublishFolder, "photos")).Should().HaveCount(
+        Directory.GetFiles(Path.Join(factory.PublishFolder, "photos")).Should().HaveCount(
             snapshot.RootElement.GetProperty("constats").EnumerateArray().SelectMany(c => c.GetProperty("pieces").EnumerateArray())
                 .Count(p => p.GetProperty("photo").ValueKind == JsonValueKind.Object) * 2);
     }
@@ -53,29 +53,43 @@ public sealed class PublishingTests(AdriaMoFactory factory) : IClassFixture<Adri
         var after = await PublishAsync();
 
         after.RootElement.GetProperty("constats").EnumerateArray().Should().NotContain(c => c.GetProperty("number").GetInt32() == number);
-        File.Exists(Path.Combine(factory.PublishFolder, photo)).Should().BeFalse();
+        File.Exists(Path.Join(factory.PublishFolder, photo)).Should().BeFalse();
     }
 
     [Fact]
-    public async Task A_change_is_published_by_the_background_publisher()
+    public async Task A_photo_whose_files_are_missing_is_left_out_and_the_rest_is_published()
     {
-        var admin = await factory.AdminAsync("arriere-plan");
+        var admin = await factory.AdminAsync("fichier-perdu");
         var number = await ConstatApiTests.CreateAsync(admin);
-        var file = Path.Combine(factory.PublishFolder, SnapshotPublisher.SnapshotFile);
+        var piece = await (await ConstatApiTests.PostPieceAsync(admin, number, TestPhotos.Jpeg(colour: new SkiaSharp.SKColor(3, 140, 3)), "Gond arraché"))
+            .Content.ReadFromJsonAsync<Constats.PieceDetail>(Ct);
+        await PublishAsync();
+        File.Delete(Path.Join(factory.PublishFolder, "photos", piece!.Photo!));
+        File.Delete(Path.Join(factory.DataFolder, "photos", piece.Photo!));
 
-        // The factory gathers changes for no time: the snapshot follows within moments.
-        var deadline = DateTime.UtcNow.AddSeconds(10);
-        while (DateTime.UtcNow < deadline && !(File.Exists(file) && (await File.ReadAllTextAsync(file, Ct)).Contains($"\"number\":{number},", StringComparison.Ordinal)))
-        {
-            await Task.Delay(50, Ct);
-        }
+        var snapshot = await PublishAsync();
 
-        (await File.ReadAllTextAsync(file, Ct)).Should().Contain($"\"number\":{number},");
+        var published = snapshot.RootElement.GetProperty("constats").EnumerateArray().Single(c => c.GetProperty("number").GetInt32() == number);
+        published.GetProperty("pieces")[0].GetProperty("text").GetString().Should().Be("Gond arraché");
+        published.GetProperty("pieces")[0].GetProperty("photo").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task The_administration_sees_when_the_public_page_was_last_published()
+    {
+        var admin = await factory.AdminAsync("etat-publication");
+        await PublishAsync();
+
+        var state = await admin.GetFromJsonAsync<PublicationState>("/api/v1/publication", Ct);
+
+        state!.LastSuccessAt.Should().NotBeNull();
+        state.LastAttemptAt.Should().Be(state.LastSuccessAt);
+        state.LastError.Should().BeNull();
     }
 
     private async Task<JsonDocument> PublishAsync()
     {
         await factory.Services.GetRequiredService<SnapshotPublisher>().PublishAsync(Ct);
-        return JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(factory.PublishFolder, SnapshotPublisher.SnapshotFile), Ct));
+        return JsonDocument.Parse(await File.ReadAllTextAsync(Path.Join(factory.PublishFolder, SnapshotPublisher.SnapshotFile), Ct));
     }
 }

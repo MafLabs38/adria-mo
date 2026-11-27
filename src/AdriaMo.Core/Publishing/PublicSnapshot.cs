@@ -13,6 +13,7 @@ public sealed record PublicSnapshot(int Version, DateTimeOffset PublishedAt, str
 /// <summary>A constat as the public sees it.</summary>
 /// <param name="Number">Its number.</param>
 /// <param name="Title">Its title.</param>
+/// <param name="CategoryKey">The key of its category, stable whatever the language or the wording.</param>
 /// <param name="Category">The French label of its category.</param>
 /// <param name="Location">Where, or <c>null</c>.</param>
 /// <param name="Status">Its status, as a key ("open", "resolved").</param>
@@ -22,6 +23,7 @@ public sealed record PublicSnapshot(int Version, DateTimeOffset PublishedAt, str
 public sealed record PublicConstat(
     int Number,
     string Title,
+    string CategoryKey,
     string Category,
     string? Location,
     string Status,

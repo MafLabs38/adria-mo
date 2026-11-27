@@ -83,7 +83,7 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
         piece.Text.Should().Be("Gond arraché");
         piece.OriginalSha256.Should().Be(Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(original)));
 
-        var keptOriginal = await File.ReadAllBytesAsync(Path.Combine(factory.DataFolder, "originals", piece.OriginalSha256 + ".jpg"), Ct);
+        var keptOriginal = await File.ReadAllBytesAsync(Path.Join(factory.DataFolder, "originals", piece.OriginalSha256 + ".jpg"), Ct);
         keptOriginal.Should().Equal(original);
 
         var published = await admin.GetByteArrayAsync($"/api/v1/photos/{piece.Photo}", Ct);
@@ -104,25 +104,72 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
     }
 
     [Theory]
-    [InlineData(6, 40, 64)]
-    [InlineData(8, 40, 64)]
-    [InlineData(5, 40, 64)]
-    [InlineData(7, 40, 64)]
-    [InlineData(3, 64, 40)]
-    [InlineData(2, 64, 40)]
-    [InlineData(4, 64, 40)]
-    [InlineData(1, 64, 40)]
-    public async Task A_photo_taken_with_the_phone_turned_is_published_upright(ushort orientation, int width, int height)
+    [InlineData(1, 64, 40, Corner.TopLeft)]
+    [InlineData(2, 64, 40, Corner.TopRight)]
+    [InlineData(3, 64, 40, Corner.BottomRight)]
+    [InlineData(4, 64, 40, Corner.BottomLeft)]
+    [InlineData(5, 40, 64, Corner.TopLeft)]
+    [InlineData(6, 40, 64, Corner.TopRight)]
+    [InlineData(7, 40, 64, Corner.BottomRight)]
+    [InlineData(8, 40, 64, Corner.BottomLeft)]
+    public async Task A_photo_taken_with_the_phone_turned_is_published_upright(ushort orientation, int width, int height, Corner red)
     {
-        var admin = await factory.AdminAsync($"tourne-{orientation}");
+        // The stored pixels have red in their top-left corner; the EXIF orientation says how to turn them to show the scene.
+        var admin = await AdminAsync();
+        var number = await CreateAsync(admin);
+        var photo = TestPhotos.Jpeg(64, 40, orientation: orientation, markTopLeft: true);
+
+        var piece = await (await PostPieceAsync(admin, number, photo)).Content.ReadFromJsonAsync<PieceDetail>(Ct);
+
+        using var published = SkiaSharp.SKBitmap.Decode(await admin.GetByteArrayAsync($"/api/v1/photos/{piece!.Photo}", Ct));
+        (published.Width, published.Height).Should().Be((width, height));
+        RedCorner(published).Should().Be(red);
+    }
+
+    public enum Corner
+    {
+        TopLeft,
+        TopRight,
+        BottomRight,
+        BottomLeft,
+    }
+
+    private static Corner RedCorner(SkiaSharp.SKBitmap bitmap)
+    {
+        bool IsRed(int x, int y) => bitmap.GetPixel(x, y) is { Red: > 200, Blue: < 60 };
+        var (left, right, top, bottom) = (bitmap.Width / 4, bitmap.Width * 3 / 4, bitmap.Height / 4, bitmap.Height * 3 / 4);
+        return new[] { Corner.TopLeft, Corner.TopRight, Corner.BottomRight, Corner.BottomLeft }.Single(c => c switch
+        {
+            Corner.TopLeft => IsRed(left, top),
+            Corner.TopRight => IsRed(right, top),
+            Corner.BottomRight => IsRed(right, bottom),
+            _ => IsRed(left, bottom),
+        });
+    }
+
+    [Fact]
+    public async Task A_photo_claiming_more_than_64_million_pixels_is_refused_before_decoding()
+    {
+        var admin = await AdminAsync();
         var number = await CreateAsync(admin);
 
-        var piece = await (await PostPieceAsync(admin, number, TestPhotos.Jpeg(64, 40, orientation: orientation))).Content.ReadFromJsonAsync<PieceDetail>(Ct);
+        var response = await PostPieceAsync(admin, number, TestPhotos.PngHeader(10_000, 10_000));
 
-        var size = ImageMetadataReader.ReadMetadata(new MemoryStream(await admin.GetByteArrayAsync($"/api/v1/photos/{piece!.Photo}", Ct)))
-            .OfType<JpegDirectory>().Single();
-        (size.GetImageWidth(), size.GetImageHeight()).Should().Be((width, height));
+        (await AccountTests.Codes(response, "photo")).Should().Equal("TooManyPixels");
     }
+
+    [Fact]
+    public async Task A_file_over_25_megabytes_is_refused()
+    {
+        var admin = await AdminAsync();
+        var number = await CreateAsync(admin);
+
+        var response = await PostPieceAsync(admin, number, new byte[Photos.PhotoIntake.MaxBytes + 1]);
+
+        (await AccountTests.Codes(response, "photo")).Should().Equal("TooLarge");
+    }
+
+    private Task<HttpClient> AdminAsync() => factory.AdminAsync("photos-" + Guid.NewGuid().ToString("N")[..8]);
 
     [Fact]
     public async Task A_photo_without_date_is_dated_when_added_and_a_text_alone_is_a_piece()
@@ -150,7 +197,7 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
         (await AccountTests.Codes(await PostPieceAsync(admin, number, null, "  "), "piece")).Should().Equal("Empty");
         (await AccountTests.Codes(await PostPieceAsync(admin, number, "pas une image"u8.ToArray()), "photo")).Should().Equal("NotAnImage");
         (await AccountTests.Codes(await PostPieceAsync(admin, number, null, new string('x', 2001)), "text")).Should().Equal("TooLong");
-        (await AccountTests.Codes(await PostPieceAsync(admin, number, []), "photo")).Should().Equal("TooLarge");
+        (await AccountTests.Codes(await PostPieceAsync(admin, number, []), "photo")).Should().Equal("EmptyFile");
         (await PostPieceAsync(admin, number, photo)).StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PostPieceAsync(admin, 99999, TestPhotos.Jpeg())).StatusCode.Should().Be(HttpStatusCode.NotFound);
     }

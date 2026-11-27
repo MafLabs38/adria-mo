@@ -8,9 +8,8 @@ import type { ConstatDetail, PieceDetail } from './types';
 import { ErrorMessage, inputClass, Panel, primaryButton, secondaryButton } from './ui';
 import { useCategories } from './useCategories';
 
-const when = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short', timeZone: 'Europe/Paris' });
-
-function PieceItem({ api, piece }: Readonly<{ api: Api; piece: PieceDetail }>) {
+function PieceItem({ api, piece, timeZone }: Readonly<{ api: Api; piece: PieceDetail; timeZone: string }>) {
+  const when = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeStyle: 'short', timeZone });
   const dated = piece.takenAt
     ? `Photo prise le ${when.format(new Date(piece.takenAt))}`
     : `Ajouté le ${when.format(new Date(piece.addedAt))}`;
@@ -43,7 +42,8 @@ export default function ConstatEditor({
   api,
   number,
   failures,
-}: Readonly<{ api: Api; number: number; failures: string[] }>) {
+  timeZone,
+}: Readonly<{ api: Api; number: number; failures: string[]; timeZone: string }>) {
   const categories = useCategories(api);
   const [constat, setConstat] = useState<ConstatDetail | null>(null);
   const [values, setValues] = useState<ConstatFieldValues | null>(null);
@@ -72,9 +72,9 @@ export default function ConstatEditor({
           });
         }
       },
-      (failure: unknown) => {
+      (error_: unknown) => {
         if (active) {
-          setError(failure);
+          setError(error_);
         }
       },
     );
@@ -91,8 +91,8 @@ export default function ConstatEditor({
       await api.put(`/constats/${number}`, values);
       setNotice('Constat enregistré.');
       reload();
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
     } finally {
       setBusy(false);
     }
@@ -131,17 +131,13 @@ export default function ConstatEditor({
           <span className="text-sm">{constat.isPublic ? 'Publié' : 'Non publié'}</span>
         </p>
       </header>
-      {notice ? (
-        <p role="status" className="rounded-lg bg-brand-50 p-3 text-sm text-brand-900">
-          {notice}
-        </p>
-      ) : null}
+      {notice ? <output className="block rounded-lg bg-brand-50 p-3 text-sm text-brand-900">{notice}</output> : null}
       <ErrorMessage error={error} />
       <Panel title="Ajouter des pièces">
         <form onSubmit={(e) => void addPieces(e)} className="space-y-3">
           <PhotoPicker files={files} onChange={setFiles} />
           <label className="block font-medium">
-            Commentaire
+            <span>Commentaire</span>
             <textarea
               className={inputClass}
               rows={2}
@@ -162,7 +158,7 @@ export default function ConstatEditor({
       <Panel title={`Pièces (${constat.pieces.length})`}>
         <ol className="space-y-3">
           {constat.pieces.map((piece) => (
-            <PieceItem key={piece.id} api={api} piece={piece} />
+            <PieceItem key={piece.id} api={api} piece={piece} timeZone={timeZone} />
           ))}
         </ol>
       </Panel>

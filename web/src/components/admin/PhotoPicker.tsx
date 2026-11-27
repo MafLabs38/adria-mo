@@ -11,34 +11,36 @@ export default function PhotoPicker({ files, onChange }: Readonly<Props>) {
   const galleryId = useId();
   const add = (list: FileList | null) => onChange([...files, ...Array.from(list ?? [])]);
   const button =
-    'flex-1 cursor-pointer rounded-xl bg-accent-400 px-3 py-3 text-center font-semibold text-slate-900 hover:bg-accent-500';
+    'flex-1 cursor-pointer rounded-xl bg-accent-400 px-3 py-3 text-center font-semibold text-slate-900 hover:bg-accent-500 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-brand-700';
 
   return (
     <fieldset className="space-y-2">
       <legend className="font-medium">Photos</legend>
       <div className="flex gap-2">
         <label htmlFor={cameraId} className={button}>
-          📷 Prendre une photo
+          <span aria-hidden="true">📷 </span>
+          <span>Prendre une photo</span>
+          <input
+            id={cameraId}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="sr-only"
+            onChange={(e) => add(e.target.files)}
+          />
         </label>
-        <input
-          id={cameraId}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="sr-only"
-          onChange={(e) => add(e.target.files)}
-        />
         <label htmlFor={galleryId} className={button}>
-          🖼️ Depuis la galerie
+          <span aria-hidden="true">🖼️ </span>
+          <span>Depuis la galerie</span>
+          <input
+            id={galleryId}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={(e) => add(e.target.files)}
+          />
         </label>
-        <input
-          id={galleryId}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          onChange={(e) => add(e.target.files)}
-        />
       </div>
       {files.length > 0 ? (
         <ul className="space-y-1 text-sm">

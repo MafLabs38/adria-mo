@@ -8,6 +8,9 @@ internal sealed class StorageOptions
     /// <summary>The section name.</summary>
     public const string Section = "Storage";
 
+    /// <summary>The file of the database, in the data folder.</summary>
+    public const string DatabaseFile = "adria-mo.db";
+
     /// <summary>The private folder: the database and the photos, originals included. A volume, never published.</summary>
     [Required]
     public string DataFolder { get; set; } = "";

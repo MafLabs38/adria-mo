@@ -9,7 +9,7 @@ const admin = `voisin${Date.now()}`;
 const adminPassword = 'le chat dort sur le radiateur';
 
 async function login(page: Page, userName: string, password: string) {
-  await page.goto('/admin/');
+  await page.goto('./admin/');
   await page.getByLabel('Identifiant').fill(userName);
   await page.getByLabel('Mot de passe').fill(password);
   await page.getByRole('button', { name: 'Se connecter' }).click();
@@ -28,6 +28,7 @@ test('@stack from a new account to a constat on the public page', async ({ page 
   await page.getByRole('button', { name: 'Créer le compte' }).click();
   await expect(page.getByRole('status')).toContainText(temporary);
   await page.getByRole('button', { name: /Se déconnecter/ }).click();
+  await expect(page.getByRole('heading', { name: 'Connexion' })).toBeVisible();
 
   // The administrator must choose his password first; a weak one is refused with a French reason.
   await login(page, admin, temporary);
@@ -57,7 +58,7 @@ test('@stack from a new account to a constat on the public page', async ({ page 
 
   // The publication gathers changes a few seconds, then the public page shows the constat and its photo, without GPS.
   await expect(async () => {
-    await page.goto('/');
+    await page.goto('./');
     await expect(page.getByRole('link', { name: /Porte du local poubelles forcée/ })).toBeVisible({ timeout: 1000 });
   }).toPass({ timeout: 30_000 });
   await page.getByRole('link', { name: /Porte du local poubelles forcée/ }).click();

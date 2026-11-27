@@ -159,6 +159,12 @@ jobs:
       - name: The public page with the back end stopped
         run: yarn e2e --grep @offline
         working-directory: web
+      # Spec §10.5: the same site under a path of another site. Built and served under /constats/, without the sandbox.
+      - name: The public page under a base path
+        run: |
+          ADRIAMO_BASE=/constats/ yarn build
+          E2E_BASE_URL= ADRIAMO_BASE=/constats/ yarn e2e --grep @smoke
+        working-directory: web
       - if: failure()
         run: cat backend.log || docker logs adria-mo-sandbox-backend-1
       - if: always()

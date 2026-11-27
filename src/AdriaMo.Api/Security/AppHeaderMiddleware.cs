@@ -1,9 +1,10 @@
 namespace AdriaMo.Api.Security;
 
 /// <summary>
-/// Refuses an API request that changes something without the header <c>X-Adria-Mo</c> (spec §2.1). A page of another site cannot
-/// send a custom header without the browser asking this site first, which it refuses (no CORS): on top of the
-/// <c>SameSite=Strict</c> cookie, a forged form or image cannot act on behalf of a logged-in administrator.
+/// Refuses every request that changes something without the header <c>X-Adria-Mo</c> (spec §2.1), whatever its path or the case
+/// of its path. A page of another site cannot send a custom header without the browser asking this site first, which it refuses
+/// (no CORS): on top of the <c>SameSite=Strict</c> cookie, a forged form or image cannot act on behalf of a logged-in
+/// administrator, even from a page of the same site.
 /// </summary>
 /// <param name="next">The next middleware.</param>
 internal sealed class AppHeaderMiddleware(RequestDelegate next)
@@ -16,9 +17,9 @@ internal sealed class AppHeaderMiddleware(RequestDelegate next)
     /// <returns>The task.</returns>
     public Task InvokeAsync(HttpContext context)
     {
-        var request = context.Request;
-        var changes = !HttpMethods.IsGet(request.Method) && !HttpMethods.IsHead(request.Method) && !HttpMethods.IsOptions(request.Method);
-        if (changes && request.Path.StartsWithSegments("/api", StringComparison.Ordinal) && !request.Headers.ContainsKey(Header))
+        var method = context.Request.Method;
+        var changes = !HttpMethods.IsGet(method) && !HttpMethods.IsHead(method) && !HttpMethods.IsOptions(method);
+        if (changes && !context.Request.Headers.ContainsKey(Header))
         {
             return Results.Problem(
                     $"The header {Header} is required.",

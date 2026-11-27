@@ -2,6 +2,8 @@ export interface Me {
   userName: string;
   roles: string[];
   mustChangePassword: boolean;
+  /** The building's time zone, in which dates are shown. */
+  timeZone: string;
 }
 
 export interface Category {
@@ -43,6 +45,12 @@ export interface UserSummary {
   roles: string[];
   mustChangePassword: boolean;
   lockedOutUntil: string | null;
+}
+
+export interface PublicationState {
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
 }
 
 export const SUPER_ADMIN = 'super-admin';

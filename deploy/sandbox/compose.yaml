@@ -23,6 +23,11 @@ services:
       - ${ADRIAMO_STATE}/publish:/publish
     secrets:
       - super-admin-password
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # Large uploads are buffered on disk by ASP.NET Core.
+    tmpfs: ["/tmp:size=128m"]
     cpus: 1.0
     mem_limit: 768m
 
@@ -35,6 +40,11 @@ services:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ${ADRIAMO_SITE:-../../web/dist}:/site:ro
       - ${ADRIAMO_STATE}/publish:/publish:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    # nginx keeps its pid and the bodies it proxies there.
+    tmpfs: ["/tmp:size=64m"]
     cpus: 0.5
     mem_limit: 128m
 

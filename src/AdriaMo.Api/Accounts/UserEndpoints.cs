@@ -39,13 +39,13 @@ internal static class UserEndpoints
         return TypedResults.Ok(summaries.ToArray());
     }
 
-    private static async Task<Results<Created<UserSummary>, ValidationProblem, Conflict>> CreateAsync(
+    private static async Task<Results<Created<UserSummary>, ValidationProblem, Conflict, ProblemHttpResult>> CreateAsync(
         CreateUserRequest request,
         UserManager<AdriaMoUser> users,
         TimeProvider time)
     {
         var userName = request.UserName?.Trim() ?? "";
-        if (userName.Length is < 2 or > 64)
+        if (userName.Length is < AccountRules.UserNameMinLength or > AccountRules.UserNameMaxLength)
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]> { ["userName"] = ["InvalidUserName"] });
         }
@@ -62,11 +62,17 @@ internal static class UserEndpoints
             return Invalid(created);
         }
 
-        await users.AddToRoleAsync(user, Roles.Admin);
+        if (!(await users.AddToRoleAsync(user, Roles.Admin)).Succeeded)
+        {
+            // An account without a role must not stay: it could not do anything, and its user name would be taken.
+            await users.DeleteAsync(user);
+            return TypedResults.Problem("The account could not be given its role.", statusCode: StatusCodes.Status500InternalServerError);
+        }
+
         return TypedResults.Created($"/api/v1/users/{user.Id}", new UserSummary(user.Id, userName, [Roles.Admin], true, null));
     }
 
-    private static async Task<Results<NoContent, NotFound, ValidationProblem>> ResetPasswordAsync(
+    private static async Task<Results<NoContent, NotFound, ValidationProblem, ProblemHttpResult>> ResetPasswordAsync(
         string id,
         ResetPasswordRequest request,
         UserManager<AdriaMoUser> users)
@@ -77,19 +83,26 @@ internal static class UserEndpoints
             return TypedResults.NotFound();
         }
 
-        // Checks the rules and renews the security stamp: every session of the account ends.
-        var token = await users.GeneratePasswordResetTokenAsync(user);
-        var reset = await users.ResetPasswordAsync(user, token, request.TemporaryPassword ?? "");
-        if (!reset.Succeeded)
+        // The rules first, so a refused password changes nothing.
+        foreach (var validator in users.PasswordValidators)
         {
-            return Invalid(reset);
+            var valid = await validator.ValidateAsync(users, user, request.TemporaryPassword);
+            if (!valid.Succeeded)
+            {
+                return Invalid(valid);
+            }
         }
 
+        // Temporary before it is set: the password is never usable without the forced change. The reset renews the security stamp,
+        // so every session of the account ends; it saves the flag and the unlocking with the new hash.
         user.MustChangePassword = true;
-        await users.UpdateAsync(user);
-        await users.SetLockoutEndDateAsync(user, null);
-        await users.ResetAccessFailedCountAsync(user);
-        return TypedResults.NoContent();
+        user.LockoutEnd = null;
+        user.AccessFailedCount = 0;
+        var token = await users.GeneratePasswordResetTokenAsync(user);
+        var reset = await users.ResetPasswordAsync(user, token, request.TemporaryPassword ?? "");
+        return reset.Succeeded
+            ? TypedResults.NoContent()
+            : TypedResults.Problem("The password could not be reset.", statusCode: StatusCodes.Status500InternalServerError);
     }
 
     private static ValidationProblem Invalid(IdentityResult result) =>

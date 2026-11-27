@@ -31,8 +31,8 @@ export default function NewConstat({
         created.number,
         outcomes.filter((o) => o.error !== null).map((o) => o.file),
       );
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
       setProgress(null);
     }
   };
@@ -43,7 +43,7 @@ export default function NewConstat({
         <PhotoPicker files={files} onChange={setFiles} />
         <ConstatFields values={values} categories={categories} onChange={setValues} />
         <label className="block font-medium">
-          Commentaire
+          <span>Commentaire</span>
           <textarea
             className={inputClass}
             rows={3}
@@ -53,11 +53,7 @@ export default function NewConstat({
           />
         </label>
         <ErrorMessage error={error} />
-        {progress ? (
-          <p role="status" className="text-sm text-brand-900">
-            {progress}
-          </p>
-        ) : null}
+        {progress ? <output className="block text-sm text-brand-900">{progress}</output> : null}
         <button type="submit" className={`${primaryButton} w-full`} disabled={progress !== null}>
           Enregistrer le constat
         </button>

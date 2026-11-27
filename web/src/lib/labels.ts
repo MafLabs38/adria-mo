@@ -35,6 +35,8 @@ const MESSAGES: Record<string, string> = {
   Empty: 'Ajoutez une photo ou un commentaire.',
   NotAnImage: "Ce fichier n'est pas une photo lisible.",
   TooLarge: 'Photo trop lourde (25 Mo au plus).',
+  TooManyPixels: 'Photo trop grande (64 millions de pixels au plus).',
+  EmptyFile: 'Ce fichier est vide.',
   AlreadyAdded: 'Cette photo est déjà dans le constat.',
 };
 

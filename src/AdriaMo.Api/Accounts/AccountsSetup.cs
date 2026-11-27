@@ -25,7 +25,7 @@ internal static class AccountsSetup
     /// <returns>The services, for chaining.</returns>
     public static IServiceCollection AddAdriaMoAccounts(this IServiceCollection services)
     {
-        services.Configure<PasswordHasherOptions>(o => o.IterationCount = PasswordPolicy.Iterations);
+        services.Configure<PasswordHasherOptions>(o => o.IterationCount = AccountRules.HashIterations);
         services.AddScoped<IPasswordHasher<AdriaMoUser>, NormalizingPasswordHasher>();
 
         services.AddIdentityCore<AdriaMoUser>(o =>
@@ -38,8 +38,8 @@ internal static class AccountsSetup
                 o.Password.RequireUppercase = false;
                 o.Password.RequireNonAlphanumeric = false;
                 o.Lockout.AllowedForNewUsers = true;
-                o.Lockout.MaxFailedAccessAttempts = PasswordPolicy.MaxFailedAttempts;
-                o.Lockout.DefaultLockoutTimeSpan = PasswordPolicy.LockoutDuration;
+                o.Lockout.MaxFailedAccessAttempts = AccountRules.MaxFailedAttempts;
+                o.Lockout.DefaultLockoutTimeSpan = AccountRules.LockoutDuration;
                 o.User.RequireUniqueEmail = false;
             })
             .AddRoles<IdentityRole>()
@@ -61,7 +61,7 @@ internal static class AccountsSetup
                 cookie.Cookie.SameSite = SameSiteMode.Strict;
                 cookie.Cookie.SecurePolicy = auth.Value.SecureCookie ? CookieSecurePolicy.Always : CookieSecurePolicy.None;
                 cookie.Cookie.Path = "/";
-                cookie.ExpireTimeSpan = PasswordPolicy.SessionLifetime;
+                cookie.ExpireTimeSpan = AccountRules.SessionLifetime;
                 cookie.SlidingExpiration = true;
                 // An API answers with a status, never with a redirection to a login page.
                 cookie.Events.OnRedirectToLogin = context => Reject(context.Response, StatusCodes.Status401Unauthorized);

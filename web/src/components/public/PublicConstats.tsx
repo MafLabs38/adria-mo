@@ -58,11 +58,14 @@ export default function PublicConstats({ data, detail }: Readonly<Props>) {
 
   const constats = useMemo(() => (state.kind === 'ready' ? state.snapshot.constats : []), [state]);
   const categories = useMemo(
-    () => [...new Set(constats.map((c) => c.category))].sort((a, b) => a.localeCompare(b, 'fr')),
+    () =>
+      [...new Map(constats.map((c) => [c.categoryKey, c.category])).entries()].sort((a, b) =>
+        a[1].localeCompare(b[1], 'fr'),
+      ),
     [constats],
   );
   const statuses = useMemo(() => [...new Set(constats.map((c) => c.status))], [constats]);
-  const shown = constats.filter((c) => (!category || c.category === category) && (!status || c.status === status));
+  const shown = constats.filter((c) => (!category || c.categoryKey === category) && (!status || c.status === status));
 
   if (state.kind === 'loading') {
     return <p className="text-slate-600">Chargement des constats…</p>;
@@ -82,22 +85,22 @@ export default function PublicConstats({ data, detail }: Readonly<Props>) {
     <div>
       <div className="mb-4 grid grid-cols-2 gap-2">
         <label className="text-sm font-medium text-brand-900">
-          Catégorie
+          <span>Catégorie</span>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value)}
             className="mt-1 block w-full rounded-lg border-slate-300 bg-white p-2"
           >
             <option value="">Toutes</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>
-                {c}
+            {categories.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
               </option>
             ))}
           </select>
         </label>
         <label className="text-sm font-medium text-brand-900">
-          État
+          <span>État</span>
           <select
             value={status}
             onChange={(e) => setStatus(e.target.value)}

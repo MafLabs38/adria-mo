@@ -21,6 +21,9 @@ export interface PublicPiece {
 export interface PublicConstat {
   number: number;
   title: string;
+  /** The stable key of the category, for filters. */
+  categoryKey: string;
+  /** Its label, in French. */
   category: string;
   location: string | null;
   status: string;

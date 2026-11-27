@@ -30,8 +30,8 @@ public sealed class PasswordRulesTests
     public void An_accent_typed_as_two_characters_counts_as_one()
     {
         // "e" followed by a combining acute accent is "é" once normalized: eleven characters, not twelve.
-        PasswordRules.Check("bleu ciél a", "eric").Should().Equal(PasswordProblem.TooShort);
-        PasswordRules.Normalize("ciél").Should().Be("ciél");
+        PasswordRules.Check("bleu cie\u0301l a", "eric").Should().Equal(PasswordProblem.TooShort);
+        PasswordRules.Normalize("cie\u0301l").Should().Be("ci\u00e9l");
     }
 
     [Fact]

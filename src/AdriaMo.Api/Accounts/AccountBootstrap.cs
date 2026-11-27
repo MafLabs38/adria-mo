@@ -2,35 +2,28 @@ using AdriaMo.Api.Data;
 using AdriaMo.Api.Settings;
 using AdriaMo.Core.Accounts;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace AdriaMo.Api.Accounts;
 
 /// <summary>
-/// At start: brings the database to the current schema, creates the roles, and creates the super-admin from a mounted secret when
-/// there is none (spec §2.1). Runs before the server accepts requests.
+/// At start, after the database migration: creates the roles, and creates the super-admin from a mounted secret when there is none
+/// (spec §2.1). Runs before the server accepts requests.
 /// </summary>
 /// <param name="services">The root services.</param>
 /// <param name="auth">The account settings.</param>
-/// <param name="storage">The storage settings.</param>
 /// <param name="time">The clock.</param>
 /// <param name="logger">The logger.</param>
 internal sealed partial class AccountBootstrap(
     IServiceProvider services,
     IOptions<AuthOptions> auth,
-    IOptions<StorageOptions> storage,
     TimeProvider time,
     ILogger<AccountBootstrap> logger) : IHostedService
 {
     /// <inheritdoc />
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(storage.Value.DataFolder);
         await using var scope = services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AdriaMoDbContext>();
-        await db.Database.MigrateAsync(cancellationToken);
-
         var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         foreach (var role in Roles.All)
         {

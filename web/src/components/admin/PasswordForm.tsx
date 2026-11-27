@@ -34,8 +34,8 @@ export default function PasswordForm({ api, forced, onChanged }: Readonly<Props>
       setConfirm('');
       setDone(true);
       onChanged(me);
-    } catch (failure) {
-      setError(failure);
+    } catch (error_) {
+      setError(error_);
     } finally {
       setBusy(false);
     }
@@ -65,7 +65,7 @@ export default function PasswordForm({ api, forced, onChanged }: Readonly<Props>
           />
         </label>
         <label className="block font-medium">
-          Nouveau mot de passe
+          <span>Nouveau mot de passe</span>
           <input
             className={inputClass}
             type="password"
@@ -78,7 +78,7 @@ export default function PasswordForm({ api, forced, onChanged }: Readonly<Props>
           />
         </label>
         <label className="block font-medium">
-          Nouveau mot de passe, une seconde fois
+          <span>Nouveau mot de passe, une seconde fois</span>
           <input
             className={inputClass}
             type="password"
@@ -92,9 +92,7 @@ export default function PasswordForm({ api, forced, onChanged }: Readonly<Props>
         {mismatch ? <p className="text-sm text-red-800">Les deux saisies sont différentes.</p> : null}
         <ErrorMessage error={error} />
         {done ? (
-          <p role="status" className="rounded-lg bg-brand-50 p-3 text-sm text-brand-900">
-            Mot de passe changé.
-          </p>
+          <output className="block rounded-lg bg-brand-50 p-3 text-sm text-brand-900">Mot de passe changé.</output>
         ) : null}
         <button type="submit" className={`${primaryButton} w-full`} disabled={busy || mismatch}>
           Enregistrer le mot de passe
