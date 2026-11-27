@@ -1,15 +1,45 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Api, ApiError } from '../../lib/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Api, type ApiError } from '../../lib/api';
+import { forgetBeforeLogout, type OutboxStore } from '../../lib/outbox';
+import { openOutbox } from '../../lib/outboxStore';
+import { adminScope, registerServiceWorker } from '../../lib/serviceWorkerClient';
+import { isStaleCode, openSession, type Session as AdminSession } from '../../lib/session';
 import ConstatEditor from './ConstatEditor';
 import ConstatList from './ConstatList';
+import DevicesPanel from './DevicesPanel';
+import InboxPage from './InboxPage';
 import LoginForm from './LoginForm';
 import NewConstat from './NewConstat';
+import OfflinePage from './OfflinePage';
 import PasswordForm from './PasswordForm';
 import { SUPER_ADMIN, type Me } from './types';
 import UsersPanel from './UsersPanel';
-import { ErrorMessage, secondaryButton } from './ui';
+import { ErrorMessage, errorText, secondaryButton } from './ui';
 
-type Session = { kind: 'loading' } | { kind: 'anonymous' } | { kind: 'error'; error: unknown } | { kind: 'in'; me: Me };
+type Session = AdminSession<Me>;
+
+function pairingText(error: ApiError): string {
+  return isStaleCode(error)
+    ? "Ce code d'appairage n'est plus valable : affichez-en un nouveau sur l'ordinateur, ou connectez-vous."
+    : errorText(error);
+}
+
+/** The photos still waiting in the phone are forgotten at logout (lib/outbox.ts), after a warning. */
+async function forgetWaitingPhotos(): Promise<boolean> {
+  let store: OutboxStore;
+  try {
+    store = await openOutbox(adminScope(import.meta.env.BASE_URL));
+  } catch {
+    return true;
+  }
+  return forgetBeforeLogout(store, (waiting) =>
+    globalThis.confirm(
+      waiting === 1
+        ? '1 photo attend encore dans ce téléphone : elle sera effacée. Se déconnecter quand même ?'
+        : `${waiting} photos attendent encore dans ce téléphone : elles seront effacées. Se déconnecter quand même ?`,
+    ),
+  );
+}
 
 function useHash(): string {
   const [hash, setHash] = useState(() => globalThis.location.hash);
@@ -27,6 +57,9 @@ function Nav({ me, onLogout }: Readonly<{ me: Me; onLogout: () => void }>) {
     <nav aria-label="Administration" className="mb-4 flex flex-wrap items-center gap-1">
       <a className={link} href="#/constats">
         Constats
+      </a>
+      <a className={link} href="#/a-classer">
+        À classer
       </a>
       <a className={link} href="#/compte">
         Mon compte
@@ -55,7 +88,15 @@ interface PageProps {
 
 function Page({ api, me, hash, onMe, failures, onCreated }: Readonly<PageProps>) {
   if (hash === '#/compte') {
-    return <PasswordForm api={api} forced={false} onChanged={onMe} />;
+    return (
+      <div className="space-y-4">
+        <PasswordForm api={api} forced={false} onChanged={onMe} />
+        <DevicesPanel api={api} timeZone={me.timeZone} />
+      </div>
+    );
+  }
+  if (hash === '#/a-classer') {
+    return <InboxPage api={api} timeZone={me.timeZone} />;
   }
   if (hash === '#/comptes' && me.roles.includes(SUPER_ADMIN)) {
     return <UsersPanel api={api} timeZone={me.timeZone} />;
@@ -82,17 +123,22 @@ export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {
     globalThis.location.hash = `#/constats/${number}`;
   };
 
-  useEffect(() => {
-    api.get<Me>('/auth/me').then(
-      (me) => setSession({ kind: 'in', me }),
-      (error: unknown) =>
-        setSession(
-          error instanceof ApiError && error.status === 401 ? { kind: 'anonymous' } : { kind: 'error', error },
-        ),
+  const open = useCallback(() => {
+    openSession<Me>(api, globalThis.location).then(setSession, (error: unknown) =>
+      setSession({ kind: 'error', error }),
     );
   }, [api]);
+  useEffect(open, [open]);
+
+  // The service worker: the page without network, the photos shared from the gallery and sent later (spec §4.1).
+  useEffect(() => {
+    registerServiceWorker(import.meta.env.BASE_URL, apiBase).catch(() => undefined);
+  }, [apiBase]);
 
   const logout = async () => {
+    if (!(await forgetWaitingPhotos())) {
+      return;
+    }
     await api.post('/auth/logout').catch(() => undefined);
     setSession({ kind: 'anonymous' });
   };
@@ -109,8 +155,19 @@ export default function AdminApp({ apiBase }: Readonly<{ apiBase: string }>) {
           </button>
         </div>
       );
+    case 'offline':
+      return <OfflinePage api={api} onOnline={open} />;
     case 'anonymous':
-      return <LoginForm api={api} onLoggedIn={(me) => setSession({ kind: 'in', me })} />;
+      return (
+        <div className="space-y-3">
+          {session.pairingError ? (
+            <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-900">
+              {pairingText(session.pairingError)}
+            </p>
+          ) : null}
+          <LoginForm api={api} onLoggedIn={(me) => setSession({ kind: 'in', me })} />
+        </div>
+      );
     case 'in': {
       const { me } = session;
       if (me.mustChangePassword) {

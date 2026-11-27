@@ -38,6 +38,8 @@ const MESSAGES: Record<string, string> = {
   TooManyPixels: 'Photo trop grande (40 millions de pixels au plus).',
   EmptyFile: 'Ce fichier est vide.',
   AlreadyAdded: 'Cette photo est déjà dans le constat.',
+  TooMany: 'Trop de photos à la fois (200 au plus).',
+  ServerError: "Le serveur n'a pas pu enregistrer cette photo : réessayez plus tard.",
 };
 
 /** The French message of an error code of the API; the code itself when it is unknown, so nothing is hidden. */
@@ -55,4 +57,21 @@ export function formatDateTime(instant: string, timeZone: string): string {
 /** "27 novembre 2026", in the building's time zone. */
 export function formatDate(instant: string, timeZone: string): string {
   return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone }).format(new Date(instant));
+}
+
+/**
+ * The title of a series of photos: "23 novembre 2026, de 09:15 à 09:20", "23 novembre 2026 à 09:15" for one instant, both dates
+ * when it spans midnight; in the building's time zone.
+ */
+export function seriesTitle(startedAt: string, endedAt: string, timeZone: string): string {
+  const day = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'long', timeZone });
+  const time = new Intl.DateTimeFormat('fr-FR', { timeStyle: 'short', timeZone });
+  const [start, end] = [new Date(startedAt), new Date(endedAt)];
+  if (day.format(start) !== day.format(end)) {
+    return `Du ${day.format(start)} à ${time.format(start)} au ${day.format(end)} à ${time.format(end)}`;
+  }
+  if (time.format(start) === time.format(end)) {
+    return `${day.format(start)} à ${time.format(start)}`;
+  }
+  return `${day.format(start)}, de ${time.format(start)} à ${time.format(end)}`;
 }

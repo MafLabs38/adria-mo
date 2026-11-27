@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { expectImagesLoaded, watchErrors } from './helpers';
 
 // The promise of the public part (spec §10.1). Runs after @stack, on the same sandbox, once its back end is stopped: the constat
-// @stack published, and its photos, stay online; only the administration is unavailable.
+// @stack published, and its photos, stay online; the administration only keeps photos for later.
 test('@offline (after the stack test) with the back end stopped the public page still shows the constats and their photos', async ({
   page,
   request,
@@ -22,7 +22,9 @@ test('@offline (after the stack test) with the back end stopped the public page 
     .click();
   await expectImagesLoaded(page, 'article img');
 
+  // The administration says the server does not answer, and still takes photos for later (spec §4.1).
   await page.goto('./admin/');
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Administration injoignable' })).toBeVisible();
+  await expect(page.getByLabel('Depuis la galerie')).toBeAttached();
   expect(errors).toEqual([]);
 });

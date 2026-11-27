@@ -6,12 +6,14 @@ interface Props {
   description: string;
   /** Keeps the page out of search engines (the administration). */
   noindex?: boolean;
+  /** Links the manifest that makes the administration installable on a phone's home screen (spec §4.1). */
+  app?: boolean;
 }
 
-const { title, description, noindex = false } = Astro.props;
+const { title, description, noindex = false, app = false } = Astro.props;
 // The site may live under a path of another site (spec §10.5): every link starts from the base, never from '/'.
 const base = import.meta.env.BASE_URL;
-const favicon = `${base.replace(/\/$/, '')}/favicon.svg`;
+const root = base.replace(/\/$/, '');
 ---
 
 <!doctype html>
@@ -20,8 +22,11 @@ const favicon = `${base.replace(/\/$/, '')}/favicon.svg`;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
-    <link rel="icon" type="image/svg+xml" href={favicon} />
+    <link rel="icon" type="image/svg+xml" href={`${root}/favicon.svg`} />
     {noindex && <meta name="robots" content="noindex, nofollow" />}
+    {app && <link rel="manifest" href={`${root}/admin/manifest.webmanifest`} />}
+    {app && <meta name="theme-color" content="#0a7359" />}
+    {app && <link rel="apple-touch-icon" href={`${root}/admin/icons/icon-192.png`} />}
     <title>{title}</title>
   </head>
   <body class="min-h-dvh bg-brand-50 text-slate-900">

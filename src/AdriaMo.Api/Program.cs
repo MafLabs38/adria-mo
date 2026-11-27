@@ -2,10 +2,14 @@ using AdriaMo.Api;
 using AdriaMo.Api.Accounts;
 using AdriaMo.Api.Constats;
 using AdriaMo.Api.Data;
+using AdriaMo.Api.Inbox;
 using AdriaMo.Api.Photos;
 using AdriaMo.Api.Publishing;
 using AdriaMo.Api.Security;
 using AdriaMo.Api.Settings;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
+using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +21,12 @@ builder.Configuration.AddEnvironmentVariables(prefix: "ADRIAMO__");
 
 builder.Services.AddAdriaMoSettings(builder.Configuration);
 builder.Services.AddSingleton(TimeProvider.System);
+// The keys that sign the session cookies live in the data folder: a restart (an update) keeps the sessions, and above all
+// the paired phones (spec §4.1), which could not log in again without a computer.
+builder.Services.AddDataProtection().SetApplicationName("adria-mo");
+builder.Services.AddOptions<KeyManagementOptions>()
+    .Configure<IOptions<StorageOptions>, ILoggerFactory>((keys, storage, logs) => keys.XmlRepository =
+        new FileSystemXmlRepository(new DirectoryInfo(Path.Join(storage.Value.DataFolder, StorageOptions.KeysFolder)), logs));
 builder.Services.AddDbContext<AdriaMoDbContext>((services, options) =>
 {
     var folder = services.GetRequiredService<IOptions<StorageOptions>>().Value.DataFolder;
@@ -63,7 +73,9 @@ app.MapGroup("/api/v1")
     .MapInfo()
     .MapAccounts()
     .MapUsers()
-    .MapConstats();
+    .MapDevices()
+    .MapConstats()
+    .MapInbox();
 
 await app.RunAsync();
 

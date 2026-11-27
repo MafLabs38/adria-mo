@@ -11,6 +11,9 @@ internal sealed class StorageOptions
     /// <summary>The file of the database, in the data folder.</summary>
     public const string DatabaseFile = "adria-mo.db";
 
+    /// <summary>The folder of the keys that sign the session cookies, in the data folder.</summary>
+    public const string KeysFolder = "keys";
+
     /// <summary>The private folder: the database and the photos, originals included. A volume, never published.</summary>
     [Required]
     public string DataFolder { get; set; } = "";

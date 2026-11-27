@@ -1,4 +1,4 @@
-# Adria MO : spécification (v0.6, 2026-11-27)
+# Adria MO : spécification (v0.7, 2026-11-27)
 
 > Outil de **maîtrise d'ouvrage citoyenne** pour l'immeuble Adria : constater, dater et suivre les
 > défauts des parties communes (malfaçons, dégradations, insalubrité, pannes à répétition), suivre
@@ -124,21 +124,36 @@ hors ligne, et retrouve sa wifi chez lui. Le but : qu'il n'ait ni mot de passe �
 - **Appairer son téléphone par QR code** (une seule fois) : dans l'administration, sur un
   ordinateur, « Ajouter mon téléphone » affiche un QR code. Il le scanne avec l'appareil photo :
   le téléphone s'ouvre sur l'application, déjà connecté (un jeton propre à cet appareil, révocable
-  depuis l'administration). Il n'a jamais tapé son mot de passe sur le téléphone.
+  depuis l'administration). Il n'a jamais tapé son mot de passe sur le téléphone. Le code sert une
+  seule fois et dix minutes au plus ; il voyage dans le fragment de l'adresse (après `#`), qu'aucun
+  serveur ne reçoit. La session du téléphone dure 90 jours sans utilisation ; « Retirer » le
+  téléphone (dans « Mon compte ») la ferme à sa requête suivante, comme se déconnecter depuis le
+  téléphone. Un mot de passe changé ferme les autres téléphones ; un mot de passe réinitialisé par
+  le super-admin (téléphone perdu) les ferme tous.
 - **« Ajouter à l'écran d'accueil »** depuis Chrome : le site s'installe avec son icône, comme une
   appli (PWA). **Ce n'est pas une appli du Play Store** : c'est le site lui-même, consultable dans
   n'importe quel navigateur ; l'installation est facultative et ne fait qu'ajouter l'icône, le
   partage depuis la galerie et l'envoi au retour de la wifi.
 - **Partager depuis la galerie** : il sélectionne ses photos dans la galerie → *Partager* →
-  **Adria MO**. Elles partent dans une **boîte « À classer »**. (Fonction de Chrome sur Android, la
+  **Adria MO**. L'application s'ouvre et les montre : un geste « Envoyer » les fait partir dans une
+  **boîte « À classer »** (une page d'un autre site peut, elle aussi, envoyer des photos au même
+  endroit : rien ne part sans que leur propriétaire les ait vues ; 50 photos par partage au plus). (Fonction de Chrome sur Android, la
   cible. Sur iPhone, rien de spécifique : le bouton « Ajouter des photos » ouvre la galerie.)
 - **Envoi automatique dès la wifi** : si la photo est prise depuis l'application sans réseau, elle
-  attend dans le téléphone et part toute seule au retour de la wifi.
+  attend dans le téléphone et part toute seule au retour de la wifi. Sans réseau, ou quand le serveur
+  de l'immeuble est arrêté, l'administration s'ouvre quand même (gardée dans le téléphone), le temps
+  de prendre ou de choisir des photos. Une photo sur laquelle le serveur échoue est réessayée, puis
+  mise de côté après trois échecs : elle ne bloque pas les suivantes. Se déconnecter efface les photos
+  qui attendent encore (après avertissement), pour qu'elles ne partent jamais sous le nom d'un autre. Le
+  navigateur ne distingue pas la wifi des données mobiles : la photo part dès que le réseau revient,
+  ce qui revient au même pour un téléphone sans forfait de données.
 - **Classer ensuite, au calme** (sur le téléphone ou l'ordinateur) : la boîte « À classer » trie les
   photos **par date de prise de vue** et les regroupe en **séries** (photos prises à quelques minutes
   d'écart = probablement le même problème) ; il rattache chaque série à un constat existant ou
   nouveau d'un geste. La date retenue est celle de la photo : un constat fait lundi et déposé jeudi
-  reste daté de lundi.
+  reste daté de lundi. Les photos sans date de prise de vue attendent à part. La boîte est commune
+  aux administrateurs : chacun peut classer les photos de l'autre ; une photo écartée est effacée,
+  original compris.
 - **QR codes d'emplacement** (pour tout le monde) : une petite étiquette par lieu (hall B, palier 3,
   local poubelles). La scanner ouvre la page de ce lieu : les constats en cours à cet endroit, et
   « Constater ici » avec l'emplacement déjà rempli.
@@ -321,7 +336,10 @@ un premier testeur tel quel.
 ### 10.6 Production, plus tard
 
 Front sur Cloudflare Pages, données publiques sur R2, back-end sur ton cluster ou une VM derrière le
-tunnel, sauvegarde du volume (base + photos originales) vers le serveur de sauvegarde de la maison.
+tunnel, sauvegarde du volume (base + photos originales) vers le serveur de sauvegarde de la maison,
+**sauf le dossier `keys/`** : les clés qui signent les sessions n'en sortent pas (une sauvegarde lue
+par un tiers ne permet pas de fabriquer une session ; une restauration déconnecte tout le monde, y
+compris les téléphones appairés).
 
 ## 11. Dépôt public, qualité et contribution
 
@@ -372,6 +390,13 @@ l'administrateur décoche s'il veut le garder pour lui ; le cookie de session es
 l'administration passe par HTTPS, y compris dans le bac à sable ; les pages publiques sont, elles
 aussi, des îlots React (la logique est dans `web/src/lib`) : les composants web de la verticale 7
 les envelopperont ou réutiliseront cette logique.
+
+Décidé le 2026-11-27 (verticale 1b) : l'appairage, la boîte « À classer » et l'envoi différé sont
+précisés au § 4.1. Le service d'arrière-plan du navigateur (*service worker*) ne couvre que
+l'administration : les pages publiques n'en ont pas, et rien de l'API n'est jamais gardé dans le
+téléphone. Les clés qui signent les cookies de session sont gardées dans le volume de données, à
+côté de la base : une mise à jour du back-end ne déconnecte personne, et surtout pas les téléphones
+appairés.
 
 Encore ouvert :
 

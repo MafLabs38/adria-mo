@@ -123,6 +123,34 @@ internal sealed class PhotoIntake : IDisposable
         }
     }
 
+    /// <summary>
+    /// Deletes the files of a photo that nothing refers to any more (a photo of the inbox that was discarded): the original and its
+    /// copies are not kept without a reason.
+    /// </summary>
+    /// <param name="photo">The files of the photo.</param>
+    /// <returns>Whether every file is gone; a file that could not be deleted stays, and the discard is done all the same.</returns>
+    public bool Forget(PiecePhoto photo)
+    {
+        ArgumentNullException.ThrowIfNull(photo);
+        var paths = new[] { photo.PublishedFileName, photo.ThumbnailFileName }
+            .Select(DerivedPath)
+            .Append(Path.Join(_originals, Path.GetFileName(photo.OriginalFileName)));
+        var gone = true;
+        foreach (var path in paths.OfType<string>())
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                gone = false;
+            }
+        }
+
+        return gone;
+    }
+
     /// <inheritdoc />
     public void Dispose() => _decoding.Dispose();
 

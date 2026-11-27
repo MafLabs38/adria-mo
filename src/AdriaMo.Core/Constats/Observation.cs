@@ -11,5 +11,11 @@ public static class Observation
     /// <param name="addedAt">When the piece was added.</param>
     /// <returns>The instant of the observation.</returns>
     public static DateTimeOffset Of(DateTimeOffset? takenAt, DateTimeOffset addedAt) =>
-        takenAt is { } taken && taken <= addedAt ? taken : addedAt;
+        IsDated(takenAt, addedAt) ? takenAt!.Value : addedAt;
+
+    /// <summary>Whether a photo has a date of its own to go by: one, and not after its upload.</summary>
+    /// <param name="takenAt">The date of the photo, if any.</param>
+    /// <param name="addedAt">When it was uploaded.</param>
+    /// <returns>Whether it has.</returns>
+    public static bool IsDated(DateTimeOffset? takenAt, DateTimeOffset addedAt) => takenAt is { } taken && taken <= addedAt;
 }

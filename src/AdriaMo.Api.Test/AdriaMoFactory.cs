@@ -13,7 +13,23 @@ public class AdriaMoFactory : WebApplicationFactory<Program>
     public const string SuperAdmin = "chef";
     public const string SuperAdminPassword = "la loge du gardien";
 
-    private readonly string _root = Path.Join(Path.GetTempPath(), "adria-mo-test-" + Guid.NewGuid().ToString("N"));
+    private readonly string _root;
+    private readonly bool _keepFolders;
+
+    /// <summary>A back end with folders of its own, deleted with it.</summary>
+    public AdriaMoFactory()
+        : this(Path.Join(Path.GetTempPath(), "adria-mo-test-" + Guid.NewGuid().ToString("N")), keepFolders: false)
+    {
+    }
+
+    /// <summary>A back end on the given folders: a second one on the same folders is the first one restarted.</summary>
+    /// <param name="root">The folder of its data and publish folders.</param>
+    /// <param name="keepFolders">Whether the folders stay when it stops.</param>
+    protected AdriaMoFactory(string root, bool keepFolders)
+    {
+        _root = root;
+        _keepFolders = keepFolders;
+    }
 
     public string DataFolder => Path.Join(_root, "data");
 
@@ -74,7 +90,7 @@ public class AdriaMoFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing && Directory.Exists(_root))
+        if (disposing && !_keepFolders && Directory.Exists(_root))
         {
             Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
             Directory.Delete(_root, recursive: true);

@@ -2,6 +2,7 @@ using AdriaMo.Api.Data;
 using AdriaMo.Api.Settings;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace AdriaMo.Api.Accounts;
@@ -51,8 +52,20 @@ internal static class AccountEndpoints
         return result.Succeeded ? TypedResults.Ok(await MeOf(users, user, building)) : Refused();
     }
 
-    private static async Task<NoContent> LogoutAsync(SignInManager<AdriaMoUser> signIn)
+    private static async Task<NoContent> LogoutAsync(
+        HttpContext http,
+        SignInManager<AdriaMoUser> signIn,
+        AdriaMoDbContext db,
+        TimeProvider time,
+        CancellationToken cancellationToken)
     {
+        // A phone that logs out is unpaired: its session would not come back without a new code anyway.
+        if (DeviceSessions.DeviceOf(http.User) is { } device)
+        {
+            await db.Devices.Where(d => d.Id == device && d.RevokedAt == null)
+                .ExecuteUpdateAsync(set => set.SetProperty(d => d.RevokedAt, time.GetUtcNow()), cancellationToken);
+        }
+
         await signIn.SignOutAsync();
         return TypedResults.NoContent();
     }
@@ -69,10 +82,10 @@ internal static class AccountEndpoints
     private static async Task<Results<Ok<Me>, ValidationProblem, UnauthorizedHttpResult>> ChangePasswordAsync(
         ChangePasswordRequest request,
         HttpContext http,
-        UserManager<AdriaMoUser> users,
-        SignInManager<AdriaMoUser> signIn,
-        IOptions<BuildingOptions> building)
+        [AsParameters] AccountServices services,
+        CancellationToken cancellationToken)
     {
+        var (users, signIn, db, time, building) = services;
         var user = await users.GetUserAsync(http.User);
         if (user is null)
         {
@@ -93,7 +106,9 @@ internal static class AccountEndpoints
             return Invalid([.. changed.Errors.Select(e => e.Code)]);
         }
 
-        await signIn.RefreshSignInAsync(user);
+        // The other sessions end with the security stamp; the other phones are revoked so the list does not show them as paired.
+        await DeviceSessions.RevokeAllAsync(db, user.Id, DeviceSessions.DeviceOf(http.User), time.GetUtcNow(), cancellationToken);
+        await DeviceSessions.RenewAsync(http, signIn, user);
         return TypedResults.Ok(await MeOf(users, user, building));
     }
 
@@ -117,6 +132,19 @@ internal static class AccountEndpoints
             _hash ??= hasher.HashPassword(User, Guid.NewGuid().ToString("N"));
     }
 }
+
+/// <summary>What changing one's password and pairing a phone need.</summary>
+/// <param name="Users">The accounts.</param>
+/// <param name="SignIn">The sign-in manager.</param>
+/// <param name="Db">The database, for the paired phones.</param>
+/// <param name="Time">The clock.</param>
+/// <param name="Building">The building settings.</param>
+internal sealed record AccountServices(
+    UserManager<AdriaMoUser> Users,
+    SignInManager<AdriaMoUser> SignIn,
+    AdriaMoDbContext Db,
+    TimeProvider Time,
+    IOptions<BuildingOptions> Building);
 
 /// <summary>A login.</summary>
 /// <param name="UserName">The user name.</param>
