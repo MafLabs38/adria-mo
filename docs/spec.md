@@ -1,4 +1,4 @@
-# Adria MO : spécification (v0.5, 2026-11-27)
+# Adria MO : spécification (v0.6, 2026-11-27)
 
 > Outil de **maîtrise d'ouvrage citoyenne** pour l'immeuble Adria : constater, dater et suivre les
 > défauts des parties communes (malfaçons, dégradations, insalubrité, pannes à répétition), suivre
@@ -40,8 +40,34 @@ L'application fait ce travail de maîtrise d'ouvrage à la place de celle qui ma
 | **Super-administrateur** | toi | identifiant + mot de passe (+ TOTP en option) | Tout ce que fait un admin, plus : comptes et rôles, réglages (barème, modération, mails, SMTP), journal de modération, suppression définitive. |
 
 - **Pas de connexion Google** : un voisin peu à l'aise avec l'informatique pourrait hésiter à donner son compte Google, et un compte local
-  suffit pour deux ou trois personnes. Mots de passe hachés (ASP.NET Core Identity), cookie de
-  session `HttpOnly`/`Secure`, limite de tentatives. Le super-admin crée les comptes des administrateurs.
+  suffit pour deux ou trois personnes. Le super-admin crée les comptes des administrateurs.
+
+### 2.1 Comptes et mots de passe
+
+Le super-admin crée le compte d'un administrateur avec un **mot de passe provisoire** qu'il lui donne
+de vive voix ; ensuite, c'est l'administrateur qui gère son mot de passe, seul.
+
+- **Premier passage obligé** : à la première connexion avec un mot de passe provisoire, l'administrateur
+  doit en choisir un nouveau ; rien d'autre n'est accessible avant.
+- **Changer son mot de passe** à tout moment (« Mon compte »), en redonnant l'ancien. Changer ou
+  réinitialiser un mot de passe **ferme toutes les autres sessions** (un téléphone perdu ne reste pas
+  connecté).
+- **Mot de passe oublié** : le super-admin le réinitialise (nouveau mot de passe provisoire, même
+  passage obligé). Personne ne peut lire un mot de passe, pas même le super-admin ; l'application
+  n'envoie jamais de mot de passe par mail.
+- **Règles** (recommandations NIST SP 800-63B et OWASP) : au moins 12 caractères, jusqu'à 128, espaces
+  et accents permis (une phrase se retient mieux qu'un mélange de symboles) ; pas d'obligation de
+  majuscule ou de chiffre ; refus des mots de passe trop courants, faits d'un seul caractère répété ou
+  contenant l'identifiant ; pas d'expiration périodique.
+- **Stockage** : jamais en clair ni dans un journal ; empreinte salée et lente (PBKDF2-HMAC-SHA512,
+  210 000 itérations, sel propre à chaque compte), par ASP.NET Core Identity ; une empreinte ancienne
+  est recalculée toute seule à la connexion suivante si le réglage se durcit.
+- **Contre les essais en série** : compte bloqué 15 minutes après 5 échecs ; nombre de tentatives
+  limité par adresse ; même message d'erreur que l'identifiant existe ou non.
+- **Session** : cookie `HttpOnly`, `Secure`, `SameSite=Strict`, valable 14 jours glissants ; les
+  requêtes qui modifient quelque chose portent en plus un en-tête propre à l'application.
+- **Premier compte** : le super-admin est créé au premier démarrage à partir d'un identifiant et d'un
+  fichier secret monté dans le conteneur, jamais du dépôt.
 
 ## 3. Le modèle : ce qu'on manipule
 
@@ -85,9 +111,10 @@ C'est la fonction de base, faite d'abord pour le mobile.
    emplacement, avec leur vignette) **ou créer un nouveau constat**.
 4. Catégorie et emplacement en quelques touches, un commentaire facultatif (la dictée du clavier
    suffit).
-5. Envoi. La photo est **réduite dans le navigateur** avant l'envoi (≈ 300 Ko au lieu de 4 Mo,
-   rapide en 4G) ; la date de prise de vue est conservée ; les coordonnées GPS sont retirées de la
-   version publiée. Le format HEIC des iPhone est converti (Mailarr le fait déjà).
+5. Envoi. L'**original** part tel quel (c'est lui qui porte l'empreinte et la date de prise de vue) ;
+   le serveur en tire la **version publiée** (réduite, ≈ 300 Ko, sans aucune métadonnée, donc sans
+   GPS) et une vignette. Une réduction dans le navigateur avant l'envoi, pour la 4G, pourra venir
+   avec l'envoi différé (§ 4.1).
 
 ### 4.1 Faire venir les photos d'un téléphone sans manipulation
 
@@ -227,7 +254,7 @@ non validée, aucun original de photo.
 | Hébergement du front | **Cloudflare Pages** (gratuit), déployé par la CI |
 | Données publiques | **Cloudflare R2** (10 Go gratuits, aucun frais de sortie), écrit par le back-end par l'API S3 |
 | Back-end | **C# / .NET**, API minimale ASP.NET Core, ASP.NET Core Identity ; contient aussi la publication, les mails planifiés (§ 9) et plus tard la modération (API OpenAI, § 6) |
-| Base | **SQLite** dans un volume (comme Mailarr), migrations FluentMigrator ; PostgreSQL possible plus tard |
+| Base | **SQLite** dans un volume (comme Mailarr), par Entity Framework Core et ses migrations (qu'ASP.NET Core Identity utilise déjà) ; PostgreSQL possible plus tard |
 | Photos | originaux (avec empreinte SHA-256) et versions publiées dans le volume ; seules les versions publiées partent sur R2 |
 | Exposition de l'API | **tunnel Cloudflare** : connexion sortante, aucun port ouvert, adresse IP cachée, HTTPS |
 | Livraison | image `ghcr.io/maflabs38/adria-mo` pour le back-end ; front sur Pages, par la CI |
@@ -339,11 +366,14 @@ Encore ouvert :
 
 ## 13. Découpage en verticales (une démo et une PR chacune)
 
-1. **Constater** : squelette du dépôt et CI complète ; comptes admin et super-admin ; constats et
-   pièces ; photo depuis le téléphone ; boîte « À classer » avec dates EXIF et séries ; appairage du
-   téléphone par QR code et installation sur l'écran d'accueil ; page publique (liste et fiche,
-   « ouvert depuis ») lue depuis la photographie publiée (§ 10.2) ; bac à sable, où la
-   page publique reste en ligne back-end arrêté. → *C'est ce qu'on envoie au premier administrateur.*
+1. **Constater**, en deux PR successives :
+   - **1a** : comptes admin et super-admin avec la gestion des mots de passe (§ 2.1) ; constats et
+     pièces (photos depuis le téléphone, date de prise de vue lue dans l'EXIF, empreinte de
+     l'original) ; publication de la photographie publique (§ 10.2) ; page publique (liste et
+     fiche, « ouvert depuis ») ; bac à sable, où la page publique reste en ligne back-end arrêté.
+   - **1b** : appairage du téléphone par QR code, installation sur l'écran d'accueil, partage depuis
+     la galerie, envoi différé, boîte « À classer » avec les séries. → *C'est ce qu'on envoie au
+     premier administrateur.*
 2. **Suivi** : interventions, signalements, chantiers, statuts, équipements et récurrence ; QR codes
    d'emplacement.
 3. **Chiffrage et tableaux de bord** : barème, coûts cumulés, KPI.

@@ -1,11 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace AdriaMo.Api.Test;
 
 [Trait("Category", "Integration")]
-public sealed class ApiSmokeTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ApiSmokeTests(AdriaMoFactory factory) : IClassFixture<AdriaMoFactory>
 {
     [Fact]
     public async Task The_liveness_probe_answers()
