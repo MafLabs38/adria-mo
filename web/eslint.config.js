@@ -1,8 +1,10 @@
 import js from '@eslint/js';
 import { defineConfig } from 'eslint/config';
 import astro from 'eslint-plugin-astro';
+import jsxA11y from 'eslint-plugin-jsx-a11y';
 import sonarjs from 'eslint-plugin-sonarjs';
 import unicorn from 'eslint-plugin-unicorn';
+import reactHooks from 'eslint-plugin-react-hooks';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
@@ -26,7 +28,7 @@ export default defineConfig(
   ...astro.configs.recommended,
   ...astro.configs['jsx-a11y-recommended'],
   {
-    files: ['**/*.{ts,mjs,js}'],
+    files: ['**/*.{ts,tsx,mjs,js}'],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     plugins: { unicorn },
     rules: {
@@ -38,5 +40,11 @@ export default defineConfig(
       'unicorn/prefer-string-raw': 'error', // S7780
       'unicorn/prefer-string-replace-all': 'error', // S7781
     },
+  },
+  // The React islands: the rules of hooks, and the accessibility rules of jsx-a11y.
+  reactHooks.configs.flat['recommended-latest'],
+  {
+    files: ['**/*.tsx'],
+    ...jsxA11y.flatConfigs.recommended,
   },
 );

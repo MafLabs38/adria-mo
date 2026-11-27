@@ -1,0 +1,12 @@
+---
+import AdminApp from '../../components/admin/AdminApp';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { apiUrl } from '../../lib/api';
+
+// The administration is never linked from the public pages (spec §2) and is not indexed.
+const apiBase = apiUrl(import.meta.env.PUBLIC_ADRIAMO_API_URL);
+---
+
+<BaseLayout title="Administration · Adria MO" description="Administration des constats." noindex>
+  <AdminApp client:only="react" apiBase={apiBase} />
+</BaseLayout>

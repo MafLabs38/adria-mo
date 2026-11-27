@@ -48,3 +48,13 @@ describe('openSinceLabel', () => {
     expect(() => openSinceLabel(days)).toThrow(RangeError);
   });
 });
+
+describe('daysOpen in another time zone', () => {
+  it('counts the days of the time zone the snapshot gives', () => {
+    // 23:30 UTC on the 26th: the 27th in Paris, still the 26th in New York.
+    const first = new Date('2026-11-26T23:30:00Z');
+    const today = new Date('2026-11-27T12:00:00Z');
+    expect(daysOpen(first, today, 'Europe/Paris')).toBe(0);
+    expect(daysOpen(first, today, 'America/New_York')).toBe(1);
+  });
+});
