@@ -34,8 +34,32 @@ public sealed class PublishingTests(AdriaMoFactory factory) : IClassFixture<Adri
         snapshot.RootElement.GetProperty("timeZone").GetString().Should().Be("Europe/Paris");
 
         var text = await File.ReadAllTextAsync(Path.Join(factory.PublishFolder, SnapshotPublisher.SnapshotFile), Ct);
-        text.Should().NotContain("publie").And.NotContain("author", "no account is published")
-            .And.NotContain("sha256", "nor the proof of the original").And.NotContain("original");
+        // Only the published fields: no account, author, original or hash.
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        void Collect(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    names.Add(property.Name);
+                    Collect(property.Value);
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in element.EnumerateArray())
+                {
+                    Collect(item);
+                }
+            }
+        }
+
+        Collect(JsonDocument.Parse(text).RootElement);
+        names.Should().BeEquivalentTo(
+            ["version", "publishedAt", "timeZone", "constats", "number", "title", "categoryKey", "category", "location", "status",
+                "firstObservedAt", "updatedAt", "pieces", "observedAt", "text", "photo", "src", "thumbnail", "width", "height"]);
+        text.Should().NotContain("publie", "the user name of the author is not published");
         Directory.GetFiles(Path.Join(factory.PublishFolder, "photos")).Should().HaveCount(
             snapshot.RootElement.GetProperty("constats").EnumerateArray().SelectMany(c => c.GetProperty("pieces").EnumerateArray())
                 .Count(p => p.GetProperty("photo").ValueKind == JsonValueKind.Object) * 2);

@@ -34,6 +34,12 @@ internal sealed class PhotoIntake : IDisposable
     /// <summary>The longest side of the thumbnail, in pixels.</summary>
     public const int ThumbnailSize = 480;
 
+    /// <summary>The JPEG quality of the published copy.</summary>
+    public const int PublishedQuality = 82;
+
+    /// <summary>The JPEG quality of the thumbnail.</summary>
+    public const int ThumbnailQuality = 75;
+
     /// <summary>The folder of the originals, under the data folder.</summary>
     public const string OriginalFolder = "originals";
 
@@ -104,8 +110,8 @@ internal sealed class PhotoIntake : IDisposable
             System.IO.Directory.CreateDirectory(_derived);
             await WriteOnceAsync(Path.Join(_originals, originalName), content, cancellationToken);
 
-            var (publishedName, width, height) = await WriteReducedAsync(decoded, codec.EncodedOrigin, PublishedSize, 82, cancellationToken);
-            var (thumbnailName, _, _) = await WriteReducedAsync(decoded, codec.EncodedOrigin, ThumbnailSize, 75, cancellationToken);
+            var (publishedName, width, height) = await WriteReducedAsync(decoded, codec.EncodedOrigin, PublishedSize, PublishedQuality, cancellationToken);
+            var (thumbnailName, _, _) = await WriteReducedAsync(decoded, codec.EncodedOrigin, ThumbnailSize, ThumbnailQuality, cancellationToken);
             return new IntakeResult(
                 new IntakenPhoto(new PiecePhoto(sha256, originalName, publishedName, thumbnailName, width, height), TakenAt(content)),
                 null);
@@ -130,7 +136,8 @@ internal sealed class PhotoIntake : IDisposable
         var bitmap = new SKBitmap(info);
         try
         {
-            if (codec.GetPixels(info, bitmap.GetPixels()) is SKCodecResult.Success or SKCodecResult.IncompleteInput)
+            // A truncated file is refused: its published copy would be half grey.
+            if (codec.GetPixels(info, bitmap.GetPixels()) == SKCodecResult.Success)
             {
                 var decoded = bitmap;
                 bitmap = null;
@@ -254,12 +261,16 @@ internal sealed class PhotoIntake : IDisposable
         }
 
         var temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
-        await File.WriteAllBytesAsync(temporary, bytes, cancellationToken);
         try
         {
+            await File.WriteAllBytesAsync(temporary, bytes, cancellationToken);
             File.Move(temporary, path, overwrite: false);
         }
         catch (IOException) when (File.Exists(path))
+        {
+            // The same content arrived at the same time: the file is there.
+        }
+        finally
         {
             File.Delete(temporary);
         }

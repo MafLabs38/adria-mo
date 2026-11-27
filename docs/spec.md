@@ -237,10 +237,11 @@ une **photographie des données publiques** chez Cloudflare :
 - `constats.json` : les constats publiés, leur frise, leur statut, les indicateurs du tableau de
   bord, et la date de publication (« à jour au 27/11 à 14:05 ») ;
 - les photos publiées (réduites, sans GPS) et leurs vignettes, nommées par leur empreinte : elles ne
-  changent jamais, donc se mettent en cache pour toujours.
+  changent jamais ; elles restent pourtant une journée au plus dans les caches, pour qu'une photo
+  retirée de la page publique (un visage, un nom) ne reste pas visible longtemps.
 
-Publication déclenchée après chaque modification (regroupée sur une trentaine de secondes), plus une
-publication complète chaque nuit. Le front public ne lit **que** cette photographie, jamais le
+Publication déclenchée après chaque modification (regroupée sur une trentaine de secondes), et au
+moins une fois par jour ; une publication qui échoue est signalée dans l'administration et retentée. Le front public ne lit **que** cette photographie, jamais le
 back-end : il marche pareil, que ta machine soit allumée ou non.
 
 Seules les données publiques sortent : rien de l'administration, aucun compte, aucune pièce
@@ -368,7 +369,9 @@ son API partagent une adresse (§ 10.3) ; une photo de plus de 40 millions de pi
 l'adresse d'un constat est `…/constat/?n=42` (une page statique lit le numéro ; `…/constats/42`
 pourra venir plus tard, en redirection) ; un constat est **visible sur la page publique par défaut**,
 l'administrateur décoche s'il veut le garder pour lui ; le cookie de session est toujours `Secure` :
-l'administration passe par HTTPS, y compris dans le bac à sable.
+l'administration passe par HTTPS, y compris dans le bac à sable ; les pages publiques sont, elles
+aussi, des îlots React (la logique est dans `web/src/lib`) : les composants web de la verticale 7
+les envelopperont ou réutiliseront cette logique.
 
 Encore ouvert :
 

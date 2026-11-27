@@ -87,17 +87,18 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
         keptOriginal.Should().Equal(original);
 
         var published = await admin.GetByteArrayAsync($"/api/v1/photos/{piece.Photo}", Ct);
-        var metadata = ImageMetadataReader.ReadMetadata(new MemoryStream(published));
+        using var publishedStream = new MemoryStream(published);
+        var metadata = ImageMetadataReader.ReadMetadata(publishedStream);
         metadata.OfType<ExifSubIfdDirectory>().Should().BeEmpty();
         metadata.OfType<GpsDirectory>().Should().BeEmpty();
         var size = metadata.OfType<JpegDirectory>().Single();
         (size.GetImageWidth(), size.GetImageHeight()).Should().Be((1600, 1200));
-        var thumbnail = ImageMetadataReader.ReadMetadata(new MemoryStream(await admin.GetByteArrayAsync($"/api/v1/photos/{piece.Thumbnail}", Ct)))
-            .OfType<JpegDirectory>().Single();
+        using var thumbnailStream = new MemoryStream(await admin.GetByteArrayAsync($"/api/v1/photos/{piece.Thumbnail}", Ct));
+        var thumbnail = ImageMetadataReader.ReadMetadata(thumbnailStream).OfType<JpegDirectory>().Single();
         (thumbnail.GetImageWidth(), thumbnail.GetImageHeight()).Should().Be((480, 360));
 
         var detail = await admin.GetFromJsonAsync<ConstatDetail>($"/api/v1/constats/{number}", Ct);
-        detail!.FirstObservedAt.Should().Be(piece.TakenAt.Value);
+        detail!.FirstObservedAt.Should().Be(piece.TakenAt!.Value);
         var summary = (await admin.GetFromJsonAsync<ConstatSummary[]>("/api/v1/constats", Ct))!.Single(c => c.Number == number);
         summary.Thumbnail.Should().Be(piece.Thumbnail);
         summary.PieceCount.Should().Be(1);
@@ -224,9 +225,9 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
         return (await response.Content.ReadFromJsonAsync<ConstatDetail>(Ct))!.Number;
     }
 
-    internal static Task<HttpResponseMessage> PostPieceAsync(HttpClient admin, int number, byte[]? photo, string? text = null)
+    internal static async Task<HttpResponseMessage> PostPieceAsync(HttpClient admin, int number, byte[]? photo, string? text = null)
     {
-        var form = new MultipartFormDataContent();
+        using var form = new MultipartFormDataContent();
         if (photo is not null)
         {
             var file = new ByteArrayContent(photo);
@@ -239,6 +240,6 @@ public sealed class ConstatApiTests(AdriaMoFactory factory) : IClassFixture<Adri
             form.Add(new StringContent(text), "text");
         }
 
-        return admin.PostAsync($"/api/v1/constats/{number}/pieces", form, Ct);
+        return await admin.PostAsync($"/api/v1/constats/{number}/pieces", form, Ct);
     }
 }

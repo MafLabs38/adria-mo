@@ -52,6 +52,4 @@ public static class ConstatRules
 /// <summary>A problem of one field: the name of the field and the code the interface says in French.</summary>
 /// <param name="Field">The field.</param>
 /// <param name="Code">The code.</param>
-public sealed record FieldProblem(string Field, string Code)
-{
-}
+public sealed record FieldProblem(string Field, string Code);

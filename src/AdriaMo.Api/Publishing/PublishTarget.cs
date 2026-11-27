@@ -36,11 +36,15 @@ internal interface IPublishTarget
 
 /// <summary>
 /// The publish folder (<see cref="StorageOptions.PublishFolder"/>): <c>constats.json</c> and <c>photos/</c>. Files are written
-/// under a hidden temporary name in the data folder, on the same volume, then moved into place.
+/// in its hidden <c>.staging</c> folder, which the static server refuses to serve, then renamed into place: a rename within one
+/// folder tree is atomic, whatever the mounts around it.
 /// </summary>
 /// <param name="storage">The storage settings.</param>
 internal sealed class FolderPublishTarget(IOptions<StorageOptions> storage) : IPublishTarget
 {
+    /// <summary>The hidden folder where files are written before they are renamed into place.</summary>
+    public const string StagingFolder = ".staging";
+
     private string Photos => Path.Join(storage.Value.PublishFolder, Core.Publishing.PublicSnapshotBuilder.PhotoFolder);
 
     /// <inheritdoc />
@@ -74,8 +78,7 @@ internal sealed class FolderPublishTarget(IOptions<StorageOptions> storage) : IP
 
     private async Task PutAsync(string destination, Stream content, CancellationToken cancellationToken)
     {
-        // Never in the served folder: a half-written file must not be reachable, even under another name.
-        var staging = Path.Join(storage.Value.DataFolder, "publishing");
+        var staging = Path.Join(storage.Value.PublishFolder, StagingFolder);
         Directory.CreateDirectory(staging);
         Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
         var temporary = Path.Join(staging, Guid.NewGuid().ToString("N") + ".tmp");

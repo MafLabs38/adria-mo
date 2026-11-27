@@ -11,7 +11,10 @@ test('@offline (after the stack test) with the back end stopped the public page 
   expect((await request.get('./api/v1/info')).ok()).toBe(false);
 
   await page.goto('./');
-  await expect(page.getByRole('link', { name: /Porte du local poubelles forcée/ }).first()).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: /Porte du local poubelles forcée/ }).first(),
+    'the constat the @stack test publishes (run it first, on this sandbox)',
+  ).toBeVisible();
   await expectImagesLoaded(page, 'main li img');
   await page
     .getByRole('link', { name: /Porte du local poubelles forcée/ })

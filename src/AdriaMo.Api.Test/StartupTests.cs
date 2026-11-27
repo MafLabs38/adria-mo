@@ -23,6 +23,27 @@ public sealed class StartupTests
     }
 
     [Fact]
+    public async Task Behind_the_proxy_each_client_address_has_its_own_login_limit()
+    {
+        await using var factory = new SettingsFactory(new() { ["Auth:LoginAttemptsPerMinute"] = "2", ["Network:BehindProxy"] = "true" });
+        var client = factory.Client();
+        async Task<HttpStatusCode> LoginFromAsync(string address)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login") { Content = JsonContent.Create(new { userName = "x", password = "y" }) };
+            request.Headers.Add("X-Forwarded-For", address);
+            return (await client.SendAsync(request, Ct)).StatusCode;
+        }
+
+        for (var i = 0; i < 2; i++)
+        {
+            await LoginFromAsync("203.0.113.1");
+        }
+
+        (await LoginFromAsync("203.0.113.1")).Should().Be(HttpStatusCode.TooManyRequests);
+        (await LoginFromAsync("203.0.113.2")).Should().Be(HttpStatusCode.Unauthorized, "another client is not held back by the first");
+    }
+
+    [Fact]
     public async Task A_super_admin_password_breaking_the_rules_stops_the_start()
     {
         await using var factory = new SettingsFactory([], bootstrapPassword: "court");
