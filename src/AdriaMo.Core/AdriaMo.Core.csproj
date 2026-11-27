@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The rules of the product (reports of defects, called "constats" in the product; observations; series of photos): plain classes, no ASP.NET, no storage. -->
+</Project>

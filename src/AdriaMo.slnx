@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="AdriaMo.Api.Test/AdriaMo.Api.Test.csproj" />
+  <Project Path="AdriaMo.Api/AdriaMo.Api.csproj" />
+  <Project Path="AdriaMo.Core.Test/AdriaMo.Core.Test.csproj" />
+  <Project Path="AdriaMo.Core/AdriaMo.Core.csproj" />
+</Solution>

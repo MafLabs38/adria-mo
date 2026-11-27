@@ -1,0 +1,62 @@
+version: 2
+updates:
+
+  - package-ecosystem: "nuget"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    # A version published a moment ago is not taken at once: a compromised release is usually withdrawn within days.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      dotnet:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "npm"
+    directory: "/web"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    # A version published a moment ago is not taken at once: a compromised release is usually withdrawn within days.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+    groups:
+      frontend:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    # A version published a moment ago is not taken at once: a compromised release is usually withdrawn within days.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "develop"
+    schedule:
+      interval: "weekly"
+    # The two actions of CodeQL (init and analyze) are one version of one tool: bumped apart, each pull request fails on the other's version.
+    groups:
+      codeql:
+        patterns: ["github/codeql-action*"]
+    # A version published a moment ago is not taken at once: a compromised release is usually withdrawn within days.
+    cooldown:
+      default-days: 7
+    commit-message:
+      prefix: "ci"
+      include: "scope"
